@@ -1,0 +1,12 @@
+dabugger
+result
+result/
+build/
+
+*.a
+*.o
+
+.direnv
+.cache
+
+.zed
