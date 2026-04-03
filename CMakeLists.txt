@@ -23,12 +23,8 @@ add_executable(${PROJECT_NAME}
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
-	$<$<CONFIG:debug>:-g3 -O0 -fsanitize=address,undefined>
-	$<$<CONFIG:release>:-O2>
-)
-
-target_link_options(${PROJECT_NAME} PRIVATE
-  $<$<CONFIG:debug>:-fsanitize=address,undefined>
+	$<$<CONFIG:Debug>:-g3 -Og>
+	$<$<CONFIG:Release>:-O2>
 )
 
 install(TARGETS ${PROJECT_NAME})

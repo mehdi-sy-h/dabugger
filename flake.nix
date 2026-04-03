@@ -15,10 +15,6 @@
           clang-tools
           cmake
           gdb
-          # LeakSanitizer conflicts with debuggers
-          (pkgs.writeShellScriptBin "no-lsan-gdb" ''
-            ASAN_OPTIONS=detect_leaks=0 exec ${pkgs.gdb}/bin/gdb "$@"
-          '')
         ];
       };
       packages.${system}.default = pkgs.stdenv.mkDerivation {
