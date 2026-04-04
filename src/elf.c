@@ -1,14 +1,15 @@
+#include "elf.h"
+
+#include <assert.h>
 #include <elf.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "elf.h"
-
 /* TODO: More specific/appropriate name,
  * and perhaps check both 32 and 64 bit cases */
-void parse_elf64_file(const char *path) {
+DebugLineSection parse_elf64_file(const char *path) {
 	FILE *elf_file = fopen(path, "rb");
 
 	if (elf_file == NULL) {
@@ -68,10 +69,29 @@ void parse_elf64_file(const char *path) {
 		exit(EXIT_FAILURE);
 	}
 
+	DebugLineSection debug_line_section = {0};
+
 	for (Elf64_Half i = 0; i < elf_header.e_shnum; i++) {
-		Elf64_Word section_name_offset = section_header[i].sh_name;
-		printf("name: %s\n", &section_names[section_name_offset]);
+		Elf64_Shdr current_section_header = section_header[i];
+		Elf64_Word section_name_offset = current_section_header.sh_name;
+
+		char *section_name = &section_names[section_name_offset];
+
+		if (strcmp(section_name, ".debug_line") == 0) {
+			printf("%s | section num: %d\n", section_name, i);
+
+			debug_line_section.size = current_section_header.sh_size;
+			debug_line_section.data = malloc(current_section_header.sh_size);
+
+			// TODO: Proper error handling or just write a reader util
+			fseek(elf_file, current_section_header.sh_offset, SEEK_SET);
+
+			fread(debug_line_section.data, current_section_header.sh_size, 1,
+				  elf_file);
+
+			break;
+		}
 	}
 
-	/* TODO: Read section header table and extract .debug_line. */
+	return debug_line_section;
 }

@@ -1,3 +1,4 @@
+#include "dwarf.h"
 #include "elf.h"
 #include <stddef.h>
 #include <stdio.h>
@@ -18,11 +19,12 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 
 	if (pid == 0) {
 		// Child process
-		// execv(inferior_path, argv);
+		// execl(inferior_path, argv);
 		// ptrace(PTRACE_TRACEME);
 	} else if (pid > 0) {
 		// Parent process
-		parse_elf64_file(argv[1]);
+		DebugLineSection debug_line_section = parse_elf64_file(argv[1]);
+		parse_debug_line_section(debug_line_section);
 	}
 
 	return EXIT_SUCCESS;
