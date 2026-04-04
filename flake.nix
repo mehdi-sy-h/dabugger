@@ -17,11 +17,24 @@
           gdb
         ];
       };
-      packages.${system}.default = pkgs.stdenv.mkDerivation {
-        pname = "dabugger";
-        version = "0.1.0";
-        src = ./.;
-        nativeBuildInputs = with pkgs; [ cmake ];
-      };
+      packages.${system} =
+        let
+          package = {
+            pname = "dabugger";
+            version = "0.1.0";
+            src = ./.;
+            nativeBuildInputs = with pkgs; [ cmake ];
+          };
+        in
+        {
+          default = pkgs.stdenv.mkDerivation package;
+          debug = pkgs.stdenv.mkDerivation (
+            package
+            // {
+              cmakeBuildType = "Debug";
+              dontStrip = true;
+            }
+          );
+        };
     };
 }
