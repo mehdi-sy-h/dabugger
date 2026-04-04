@@ -20,6 +20,7 @@ add_compile_options(
 
 add_executable(${PROJECT_NAME}
 	src/dabugger.c
+	src/elf.c
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
