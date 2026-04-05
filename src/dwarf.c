@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 void parse_debug_line_section(DebugLineSection debug_line_section) {
-	// See DWARF 5 Specification Table 6.4
+	/* See DWARF 5 Specification Table 6.4 */
 	LineNumStateMachine state_machine = {
 		.address = 0,
 		.op_index = 0,

@@ -2,7 +2,7 @@
 #define _DABUGGER_DWARF_H
 
 #include "elf.h"
-#include "uleb.h"
+#include "leb.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -29,6 +29,8 @@ typedef struct InitialLength64 {
 	uint8_t value[12];
 } InitialLength64;
 
+typedef uint64_t ULEB128Value;
+
 /* TODO: Type for 32 bit dwarf header */
 
 typedef struct LineNumProgHeader64 {
@@ -45,12 +47,12 @@ typedef struct LineNumProgHeader64 {
 	uint8_t opcode_base;
 	uint8_t *standard_opcode_lengths;
 	uint8_t directory_entry_format_count;
-	ULEB128 *directory_entry_format[2];
-	ULEB128 directories_count;
+	ULEB128Value *directory_entry_format[2];
+	ULEB128Value directories_count;
 	/* TODO: directories */
 	uint8_t file_name_entry_format_count;
-	ULEB128 *file_name_entry_format[2];
-	ULEB128 file_names_count;
+	ULEB128Value *file_name_entry_format[2];
+	ULEB128Value file_names_count;
 	/* TODO: file_names */
 } LineNumProgHeader64;
 
