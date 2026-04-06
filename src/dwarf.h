@@ -33,6 +33,7 @@ typedef uint64_t ULEB128Value;
 
 /* TODO: Type for 32 bit dwarf header */
 
+/* The line number program header for a compilation unit (64 bit format) */
 typedef struct LineNumProgHeader64 {
 	InitialLength64 unit_length;
 	uint16_t version;
@@ -45,7 +46,7 @@ typedef struct LineNumProgHeader64 {
 	int8_t line_base;
 	uint8_t line_range;
 	uint8_t opcode_base;
-	uint8_t *standard_opcode_lengths;
+	const uint8_t *standard_opcode_lengths;
 	uint8_t directory_entry_format_count;
 	ULEB128Value *directory_entry_format[2];
 	ULEB128Value directories_count;

@@ -5,8 +5,8 @@
 #include <stdint.h>
 
 typedef struct DebugLineSection {
-	size_t size;
-	uint8_t *data;
+	const size_t size;
+	const uint8_t *data;
 } DebugLineSection;
 
 extern DebugLineSection parse_elf64_file(const char *path);

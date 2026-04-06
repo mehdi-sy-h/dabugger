@@ -6,7 +6,7 @@
 
 typedef struct ULEBReadResult {
 	uint64_t value;
-	size_t size_in_bytes;
+	size_t bytes_read;
 } ULEBReadResult;
 
 /* TODO: Type for ULEB128 values? */
