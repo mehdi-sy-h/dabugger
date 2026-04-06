@@ -15,6 +15,7 @@
           clang-tools
           cmake
           gdb
+          dwarfdump
         ];
       };
       packages.${system} =
