@@ -56,8 +56,8 @@ static LineNumProgHeader64 parse_line_header64(Cursor *cursor) {
 		cursor->remaining -= content_type.bytes_read;
 
 		ULEBReadResult form_code = read_uleb128(cursor->ptr);
-		cursor->ptr += content_type.bytes_read;
-		cursor->remaining -= content_type.bytes_read;
+		cursor->ptr += form_code.bytes_read;
+		cursor->remaining -= form_code.bytes_read;
 	}
 
 	return header;
