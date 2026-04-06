@@ -16,6 +16,7 @@ add_compile_options(
 	-Wextra
 	-Wpedantic
 	-Wshadow
+	-Wconversion
 )
 
 add_executable(${PROJECT_NAME}
