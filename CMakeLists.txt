@@ -17,6 +17,7 @@ add_compile_options(
 	-Wpedantic
 	-Wshadow
 	-Wconversion
+	-gdwarf64 # TODO: Remove once 32 bit DWARF is implemented
 )
 
 add_executable(${PROJECT_NAME}

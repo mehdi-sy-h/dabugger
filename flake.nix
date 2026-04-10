@@ -28,8 +28,8 @@
           };
         in
         {
-          default = pkgs.stdenv.mkDerivation package;
-          debug = pkgs.stdenv.mkDerivation (
+          default = pkgs.clangStdenv.mkDerivation package;
+          debug = pkgs.clangStdenv.mkDerivation (
             package
             // {
               cmakeBuildType = "Debug";
