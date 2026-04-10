@@ -2,7 +2,6 @@
 #define _DABUGGER_DWARF_H
 
 #include "elf.h"
-#include "leb.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -22,6 +21,8 @@ typedef struct LineNumStateMachine {
 	bool prologue_end;
 	bool epilogue_begin;
 } LineNumStateMachine;
+
+typedef struct {} DwarfLineContext;
 
 /* TODO: Fix these defs */
 typedef uint8_t InitialLength32;
@@ -75,8 +76,12 @@ typedef enum DwarfFormCode {
 /* TODO: Enums to specify what the possible content type and form code combinations are,
  * maybe tagged union. */
 typedef struct DwarfFormatDesc {
+	/*
 	DwarfLineNumContentType content_type;
 	DwarfFormCode form_code;
+	*/
+	uint64_t content_type;
+	uint64_t form_code;
 } DwarfFormatDesc;
 
 /* TODO: Type for 32 bit dwarf header */
@@ -94,7 +99,7 @@ typedef struct LineNumProgHeader64 {
 	int8_t line_base;
 	uint8_t line_range;
 	uint8_t opcode_base;
-	const uint8_t *standard_opcode_lengths;
+	uint8_t *standard_opcode_lengths;
 	uint8_t directory_entry_format_count;
 	DwarfFormatDesc *directory_entry_format;
 	uint64_t directories_count;

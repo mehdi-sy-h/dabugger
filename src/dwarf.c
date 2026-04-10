@@ -1,85 +1,87 @@
 #include "dwarf.h"
 #include "elf.h"
-#include "leb.h"
+#include "reader.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-typedef struct Cursor {
-	const uint8_t *ptr;
-	size_t remaining;
-} Cursor;
-
-/* TODO: Implement and replace naked advancements with this to incorporate
- * safety checks. */
-static inline void advance_cursor(Cursor *cursor, size_t n) {};
-
-static inline void read_bytes(Cursor *cursor, void *dst, size_t n) {
-	n = n <= cursor->remaining ? n : cursor->remaining;
-	memcpy(dst, cursor->ptr, n);
-	cursor->ptr += n;
-	cursor->remaining -= n;
-}
-
-static LineNumProgHeader64 alloc_line_header64(Cursor *cursor) {
+/* TODO: 32 bit parsing is more important than 64 bit! */
+static LineNumProgHeader64 alloc_line_header64(BinaryReader *reader) {
 	LineNumProgHeader64 header;
 
-	read_bytes(cursor, &header.unit_length, sizeof(header.unit_length));
-	read_bytes(cursor, &header.version, sizeof(header.version));
-	read_bytes(cursor, &header.address_size, sizeof(header.address_size));
-	read_bytes(cursor, &header.segment_selector_size,
-			   sizeof(header.segment_selector_size));
-	read_bytes(cursor, &header.header_length, sizeof(header.header_length));
-	read_bytes(cursor, &header.minimum_instruction_length,
-			   sizeof(header.minimum_instruction_length));
-	read_bytes(cursor, &header.maximum_operations_per_instruction,
-			   sizeof(header.maximum_operations_per_instruction));
-	read_bytes(cursor, &header.default_is_stmt, sizeof(header.default_is_stmt));
-	read_bytes(cursor, &header.line_base, sizeof(header.line_base));
-	read_bytes(cursor, &header.line_range, sizeof(header.line_range));
-	read_bytes(cursor, &header.opcode_base, sizeof(header.opcode_base));
+	/* TODO: Handle read results */
+	read_bytes(reader, &header,
+			   sizeof(header.unit_length) + sizeof(header.version) +
+				   sizeof(header.address_size) +
+				   sizeof(header.segment_selector_size) +
+				   sizeof(header.header_length) +
+				   sizeof(header.minimum_instruction_length) +
+				   sizeof(header.maximum_operations_per_instruction) +
+				   sizeof(header.default_is_stmt) + sizeof(header.line_base) +
+				   sizeof(header.line_range) + sizeof(header.opcode_base));
 
-	/* TODO: In the places where you are setting cursor fields directly, do
-	 * safety checks */
-	header.standard_opcode_lengths = cursor->ptr;
-	cursor->ptr += header.opcode_base - 1;
-	cursor->remaining -= header.opcode_base - 1;
-
-	read_bytes(cursor, &header.directory_entry_format_count,
-			   sizeof(header.directory_entry_format_count));
-
-	/* TODO: Write/allocate ULEB pairs in header struct, may need to refactor
-	 * types, need to consider ownership as well. Directories and file names
-	 * will most likely need to be stored on the heap because of the variation
-	 * in format types. */
-
-	header.directory_entry_format =
-		malloc(sizeof(DwarfFormatDesc) * header.directory_entry_format_count);
-
-	/* TODO: Safety checks */
-	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
-		ULEBReadResult content_type = read_uleb128(cursor->ptr);
-		cursor->ptr += content_type.bytes_read;
-		cursor->remaining -= content_type.bytes_read;
-
-		header.directory_entry_format[i].content_type = content_type.value;
-
-		ULEBReadResult form_code = read_uleb128(cursor->ptr);
-		cursor->ptr += form_code.bytes_read;
-		cursor->remaining -= form_code.bytes_read;
-
-		header.directory_entry_format[i].form_code = form_code.value;
+	header.standard_opcode_lengths =
+		calloc(header.opcode_base - 1, sizeof(uint8_t));
+	if (header.standard_opcode_lengths == NULL) {
+		/* TODO: Handle failure */
 	}
 
-	ULEBReadResult directories_count = read_uleb128(cursor->ptr);
-	cursor->ptr += directories_count.bytes_read;
-	cursor->remaining -= directories_count.bytes_read;
+	read_bytes(reader, header.standard_opcode_lengths, header.opcode_base - 1);
+	read_bytes(reader, &header.directory_entry_format_count,
+			   sizeof(header.directory_entry_format_count));
 
-	header.directories_count = directories_count.value;
+	header.directory_entry_format =
+		calloc(sizeof(DwarfFormatDesc), header.directory_entry_format_count);
+	if (header.directory_entry_format == NULL) {
+		/* TODO: Handle failure */
+	}
+
+	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
+		read_uleb128(reader, &header.directory_entry_format[i].content_type);
+		read_uleb128(reader, &header.directory_entry_format[i].form_code);
+	}
+
+	read_uleb128(reader, &header.directories_count);
+
+	/* Vibe slop printout start */
+	printf("unit_length (raw): %02x %02x %02x %02x %02x %02x %02x %02x %02x "
+		   "%02x %02x %02x\n",
+		   header.unit_length.value[0], header.unit_length.value[1],
+		   header.unit_length.value[2], header.unit_length.value[3],
+		   header.unit_length.value[4], header.unit_length.value[5],
+		   header.unit_length.value[6], header.unit_length.value[7],
+		   header.unit_length.value[8], header.unit_length.value[9],
+		   header.unit_length.value[10], header.unit_length.value[11]);
+	printf("version: %u\n", header.version);
+	printf("address_size: %u\n", header.address_size);
+	printf("segment_selector_size: %u\n", header.segment_selector_size);
+	printf("header_length: %zu\n", header.header_length);
+	printf("minimum_instruction_length: %u\n",
+		   header.minimum_instruction_length);
+	printf("maximum_operations_per_instruction: %u\n",
+		   header.maximum_operations_per_instruction);
+	printf("default_is_stmt: %u\n", header.default_is_stmt);
+	printf("line_base: %d\n", header.line_base);
+	printf("line_range: %u\n", header.line_range);
+	printf("opcode_base: %u\n", header.opcode_base);
+	printf("standard_opcode_lengths:");
+	for (uint8_t i = 0; i < header.opcode_base - 1; i++) {
+		printf(" %u", header.standard_opcode_lengths[i]);
+	}
+	printf("\n");
+	printf("directory_entry_format_count: %u\n",
+		   header.directory_entry_format_count);
+	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
+		printf("  format[%u]: content_type=%" PRIu64 " form_code=%" PRIu64 "\n",
+			   i, header.directory_entry_format[i].content_type,
+			   header.directory_entry_format[i].form_code);
+	}
+	printf("directories_count: %" PRIu64 "\n", header.directories_count);
+	/* Vibe slop printout end */
 
 	/* TODO: directories */
 
@@ -161,7 +163,7 @@ static LineNumProgHeader64 alloc_line_header64(Cursor *cursor) {
 
 static void free_line_header64(LineNumProgHeader64 *header) {
 	free(header->directory_entry_format);
-	free(header->file_name_entry_format);
+	/*free(header->file_name_entry_format);*/
 }
 
 void parse_debug_line_section(DebugLineSection debug_line_section) {
@@ -181,9 +183,9 @@ void parse_debug_line_section(DebugLineSection debug_line_section) {
 		.discriminator = 0,
 	};
 
-	Cursor cursor = {.ptr = debug_line_section.data,
-					 .remaining = debug_line_section.size};
+	BinaryReader reader = {.cursor = debug_line_section.data,
+						   .remaining = debug_line_section.size};
 
-	LineNumProgHeader64 header = alloc_line_header64(&cursor);
+	LineNumProgHeader64 header = alloc_line_header64(&reader);
 	free_line_header64(&header);
 }

@@ -24,6 +24,7 @@ add_executable(${PROJECT_NAME}
 	src/dabugger.c
 	src/elf.c
 	src/dwarf.c
+	src/reader.c
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
