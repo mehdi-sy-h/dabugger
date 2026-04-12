@@ -27,10 +27,10 @@ ReadResult read_bytes(BinaryReader *reader, void *out, size_t n) {
 	return result;
 }
 
-ReadResult read_uleb128(BinaryReader *reader, uint64_t *value) {
+ReadResult read_uleb128(BinaryReader *reader, uint64_t *out) {
 	ReadResult result = {0};
 	uint8_t byte;
-	*value = 0;
+	*out = 0;
 	do {
 		if (result.bytes_consumed == 10) {
 			result.status = READ_ERR_ULEB_U64_OVERFLOW;
@@ -45,12 +45,13 @@ ReadResult read_uleb128(BinaryReader *reader, uint64_t *value) {
 			return result;
 		}
 
-		*value |= (uint64_t)(byte & 0x7f) << ((result.bytes_consumed) * 7);
+		*out |= (uint64_t)(byte & 0x7f) << ((result.bytes_consumed) * 7);
 		result.bytes_consumed++;
 	} while ((byte & 0x80) != 0);
 	return result;
 }
 
+/* TODO: Copy instead of returning pointer to string */
 ReadResult read_cstring(BinaryReader *reader, const char **out) {
 	ReadResult result = {0};
 	void *end = memchr(reader->cursor, '\0', reader->remaining);
