@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct LineNumStateMachine {
+typedef struct {
 	size_t address;
 	uint64_t op_index;
 	uint32_t file;
@@ -24,15 +24,15 @@ typedef struct LineNumStateMachine {
 
 typedef struct {} DwarfLineContext;
 
-/* TODO: Fix these defs */
-typedef uint8_t InitialLength32;
+typedef uint8_t InitialLength32; /* Must be less than 0xfffffff0 */
 
-typedef struct InitialLength64 {
-	uint8_t value[12];
+typedef struct __attribute__((packed)) {
+	uint32_t marker; /* Always 0xffffffff */
+	uint64_t length;
 } InitialLength64;
 
 /* See Dwarf 5 Specification 7.22 */
-typedef enum DwarfLineNumContentType {
+typedef enum {
 	DW_LNCT_path = 0x1,
 	DW_LNCT_directory_index = 0x2,
 	DW_LNCT_timestamp = 0x3,
@@ -43,7 +43,7 @@ typedef enum DwarfLineNumContentType {
 } DwarfLineNumContentType;
 
 /* See Dwarf 5 Specification 7.5.5 */
-typedef enum DwarfFormCode {
+typedef enum {
 	DW_FORM_data1      = 0x0b,
 	DW_FORM_data2      = 0x05,
 	DW_FORM_data4      = 0x06,
@@ -73,26 +73,30 @@ typedef enum DwarfFormCode {
 	DW_FORM_sec_offset = 0x17,
 } DwarfFormCode;
 
-/* TODO: Enums to specify what the possible content type and form code combinations are,
- * maybe tagged union. */
-typedef struct DwarfFormatDesc {
-	/*
+typedef struct {
 	DwarfLineNumContentType content_type;
 	DwarfFormCode form_code;
-	*/
-	uint64_t content_type;
-	uint64_t form_code;
-} DwarfFormatDesc;
+} DwarfLineNumFormatDesc;
 
 /* TODO: Type for 32 bit dwarf header */
 
+/* Not all the fields are necessarily defined for a given entry.
+ * But they are all zero initialized, including fields that are undefined. */
+typedef struct {
+	const char* path;
+	uint64_t directory_index;
+	uint64_t timestamp;
+	uint64_t size;
+	uint8_t md5[16];
+} DwarfLineNumContentEntry;
+
 /* The line number program header for a compilation unit (64 bit format) */
-typedef struct LineNumProgHeader64 {
+typedef struct {
 	InitialLength64 unit_length;
 	uint16_t version;
 	uint8_t address_size;
 	uint8_t segment_selector_size;
-	size_t header_length; /* TODO: This is dependent on the object file not the system */
+	uint64_t header_length;
 	uint8_t minimum_instruction_length;
 	uint8_t maximum_operations_per_instruction;
 	uint8_t default_is_stmt;
@@ -101,13 +105,13 @@ typedef struct LineNumProgHeader64 {
 	uint8_t opcode_base;
 	uint8_t *standard_opcode_lengths;
 	uint8_t directory_entry_format_count;
-	DwarfFormatDesc *directory_entry_format;
+	DwarfLineNumFormatDesc *directory_entry_format;
 	uint64_t directories_count;
-	/* TODO: directories */
+	DwarfLineNumContentEntry *directories;
 	uint8_t file_name_entry_format_count;
-	DwarfFormatDesc *file_name_entry_format;
+	DwarfLineNumFormatDesc *file_name_entry_format;
 	uint64_t file_names_count;
-	/* TODO: file_names */
+	DwarfLineNumContentEntry *file_names;
 } LineNumProgHeader64;
 
 extern void parse_debug_line_section(DebugLineSection debug_line_section);
