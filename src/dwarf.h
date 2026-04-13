@@ -114,6 +114,6 @@ typedef struct {
 	DwarfLineNumContentEntry *file_names;
 } LineNumProgHeader64;
 
-extern void parse_debug_line_section(DebugLineSection debug_line_section);
+extern void parse_debug_line_section(DebugSections debug_sections);
 
 #endif /* _DABUGGER_DWARF_H */

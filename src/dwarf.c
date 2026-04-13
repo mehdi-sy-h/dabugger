@@ -6,35 +6,59 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static void read_lnct_path(BinaryReader *reader, DwarfFormCode form_code,
+static void read_lnct_path(BinaryReader *debug_line_reader,
+						   SectionBuffer *debug_line_str_buffer,
+						   DwarfFormCode form_code,
 						   DwarfLineNumContentEntry *out_entry) {
 	const char *path;
 	ReadResult result;
 
 	if (form_code == DW_FORM_string) {
-		result = read_cstring(reader, &path);
+		/* TODO: Could be bad, malloc path and copy into that instead?
+		 * Or reimplement read_cstring to return a copy of the string. */
+		result = read_cstring(debug_line_reader, &path);
 	} else if (form_code == DW_FORM_line_strp || form_code == DW_FORM_strp ||
 			   form_code == DW_FORM_strp_sup) {
 		uint64_t offset; /* TODO: This is uint32_t if using 32 bit dwarf */
-		result = read_bytes(reader, &offset, 8);
-		/* TODO: Extract string from offset into relevant section */
+		result = read_bytes(debug_line_reader, &offset, 8);
+
+		if (form_code == DW_FORM_line_strp) {
+			/* TODO: Again for similar reasons as above this could be unsafe
+			 * returning a pointer to a buffer with spurious lifetime.
+			 * If allocations get too annoying perhaps switch to an arena
+			 * because the lifetime of all these things are mostly the same. */
+			path = (const char *)(debug_line_str_buffer->data) + offset;
+		} else if (form_code == DW_FORM_strp) {
+			/* TODO */
+		} else if (form_code == DW_FORM_strp_sup) {
+			/* Supplementary string section (in split object file), probably
+			 * wont handle. */
+		}
 	} else if (form_code == DW_FORM_strx || form_code == DW_FORM_strx1 ||
 			   form_code == DW_FORM_strx2 || form_code == DW_FORM_strx3 ||
 			   form_code == DW_FORM_strx4) {
-		/* TODO: This is .debug_line.dwo section stuff idk if I'll
-		 * handle it (or split objects at all) */
+		/* This is .debug_line.dwo section stuff idk if I'll handle it (or split
+		 * objects at all) */
 	} else {
 		/* TODO: Handle invalid case */
 	}
+
+	/* TODO: malloc error? */
+	/*
+	if (path == NULL) {
+	}
+	*/
 
 	if (result.status != READ_OK) {
 		/* TODO: Handle read error */
 		return;
 	}
 
+	printf("%s", path);
 	out_entry->path = path;
 }
 
@@ -132,25 +156,36 @@ static void read_lnct_md5(BinaryReader *reader, DwarfFormCode form_code,
 }
 
 /* TODO: 32 bit parsing is more important than 64 bit! */
-static LineNumProgHeader64 alloc_line_header64(BinaryReader *reader) {
+static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 	/* TODO: Put assert guards here (and all around the code base!) */
 	LineNumProgHeader64 header;
 
+	BinaryReader debug_line_reader = {
+		.cursor = sections->debug_line.data,
+		.remaining = sections->debug_line.size,
+	};
+
 	/* TODO: Handle read results */
-	read_bytes(reader, &header.unit_length, sizeof(header.unit_length));
-	read_bytes(reader, &header.version, sizeof(header.version));
-	read_bytes(reader, &header.address_size, sizeof(header.address_size));
-	read_bytes(reader, &header.segment_selector_size,
+	read_bytes(&debug_line_reader, &header.unit_length,
+			   sizeof(header.unit_length));
+	read_bytes(&debug_line_reader, &header.version, sizeof(header.version));
+	read_bytes(&debug_line_reader, &header.address_size,
+			   sizeof(header.address_size));
+	read_bytes(&debug_line_reader, &header.segment_selector_size,
 			   sizeof(header.segment_selector_size));
-	read_bytes(reader, &header.header_length, sizeof(header.header_length));
-	read_bytes(reader, &header.minimum_instruction_length,
+	read_bytes(&debug_line_reader, &header.header_length,
+			   sizeof(header.header_length));
+	read_bytes(&debug_line_reader, &header.minimum_instruction_length,
 			   sizeof(header.minimum_instruction_length));
-	read_bytes(reader, &header.maximum_operations_per_instruction,
+	read_bytes(&debug_line_reader, &header.maximum_operations_per_instruction,
 			   sizeof(header.maximum_operations_per_instruction));
-	read_bytes(reader, &header.default_is_stmt, sizeof(header.default_is_stmt));
-	read_bytes(reader, &header.line_base, sizeof(header.line_base));
-	read_bytes(reader, &header.line_range, sizeof(header.line_range));
-	read_bytes(reader, &header.opcode_base, sizeof(header.opcode_base));
+	read_bytes(&debug_line_reader, &header.default_is_stmt,
+			   sizeof(header.default_is_stmt));
+	read_bytes(&debug_line_reader, &header.line_base, sizeof(header.line_base));
+	read_bytes(&debug_line_reader, &header.line_range,
+			   sizeof(header.line_range));
+	read_bytes(&debug_line_reader, &header.opcode_base,
+			   sizeof(header.opcode_base));
 
 	header.standard_opcode_lengths =
 		calloc(header.opcode_base - 1, sizeof(uint8_t));
@@ -158,8 +193,9 @@ static LineNumProgHeader64 alloc_line_header64(BinaryReader *reader) {
 		/* TODO: Handle failure */
 	}
 
-	read_bytes(reader, header.standard_opcode_lengths, header.opcode_base - 1);
-	read_bytes(reader, &header.directory_entry_format_count,
+	read_bytes(&debug_line_reader, header.standard_opcode_lengths,
+			   header.opcode_base - 1);
+	read_bytes(&debug_line_reader, &header.directory_entry_format_count,
 			   sizeof(header.directory_entry_format_count));
 
 	header.directory_entry_format = calloc(sizeof(DwarfLineNumFormatDesc),
@@ -171,16 +207,16 @@ static LineNumProgHeader64 alloc_line_header64(BinaryReader *reader) {
 	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
 		uint64_t content_type_tmp, form_code_tmp;
 
-		read_uleb128(reader, &content_type_tmp);
+		read_uleb128(&debug_line_reader, &content_type_tmp);
 		header.directory_entry_format[i].content_type =
 			(DwarfLineNumContentType)content_type_tmp;
 
-		read_uleb128(reader, &form_code_tmp);
+		read_uleb128(&debug_line_reader, &form_code_tmp);
 		header.directory_entry_format[i].form_code =
 			(DwarfFormCode)form_code_tmp;
 	}
 
-	read_uleb128(reader, &header.directories_count);
+	read_uleb128(&debug_line_reader, &header.directories_count);
 
 	header.directories =
 		calloc(header.directories_count, sizeof(DwarfLineNumContentEntry));
@@ -196,19 +232,21 @@ static LineNumProgHeader64 alloc_line_header64(BinaryReader *reader) {
 			header.directories[i] = entry;
 			switch (fmt.content_type) {
 			case DW_LNCT_path:
-				read_lnct_path(reader, fmt.form_code, &entry);
+				read_lnct_path(&debug_line_reader, &sections->debug_line_str,
+							   fmt.form_code, &entry);
 				break;
 			case DW_LNCT_directory_index:
-				read_lnct_directory_index(reader, fmt.form_code, &entry);
+				read_lnct_directory_index(&debug_line_reader, fmt.form_code,
+										  &entry);
 				break;
 			case DW_LNCT_timestamp:
-				read_lnct_timestamp(reader, fmt.form_code, &entry);
+				read_lnct_timestamp(&debug_line_reader, fmt.form_code, &entry);
 				break;
 			case DW_LNCT_size:
-				read_lnct_size(reader, fmt.form_code, &entry);
+				read_lnct_size(&debug_line_reader, fmt.form_code, &entry);
 				break;
 			case DW_LNCT_MD5:
-				read_lnct_md5(reader, fmt.form_code, &entry);
+				read_lnct_md5(&debug_line_reader, fmt.form_code, &entry);
 				break;
 			default:
 				/* Skip vendor defined content descriptions */
@@ -229,7 +267,7 @@ static void free_line_header64(LineNumProgHeader64 *header) {
 	/*free(header->file_name_entry_format);*/
 }
 
-void parse_debug_line_section(DebugLineSection debug_line_section) {
+void parse_debug_line_section(DebugSections debug_sections) {
 	/* See DWARF 5 Specification Table 6.4 */
 	LineNumStateMachine state_machine = {
 		.address = 0,
@@ -246,9 +284,6 @@ void parse_debug_line_section(DebugLineSection debug_line_section) {
 		.discriminator = 0,
 	};
 
-	BinaryReader reader = {.cursor = debug_line_section.data,
-						   .remaining = debug_line_section.size};
-
-	LineNumProgHeader64 header = alloc_line_header64(&reader);
+	LineNumProgHeader64 header = alloc_line_header64(&debug_sections);
 	free_line_header64(&header);
 }

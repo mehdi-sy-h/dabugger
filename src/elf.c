@@ -9,7 +9,8 @@
 
 /* TODO: More specific/appropriate name,
  * and perhaps check both 32 and 64 bit cases */
-DebugLineSection parse_elf64_file(const char *path) {
+/* TODO: Refactor this function its garbage */
+DebugSections parse_elf64_file(const char *path) {
 	FILE *elf_file = fopen(path, "rb");
 
 	if (elf_file == NULL) {
@@ -69,7 +70,9 @@ DebugLineSection parse_elf64_file(const char *path) {
 		exit(EXIT_FAILURE);
 	}
 
-	DebugLineSection debug_line_section = {0};
+	DebugSections debug_sections = {0};
+	SectionBuffer debug_line_section = {0};
+	SectionBuffer debug_line_str_section = {0};
 
 	for (Elf64_Half i = 0; i < elf_header.e_shnum; i++) {
 		Elf64_Shdr current_section_header = section_header[i];
@@ -88,10 +91,20 @@ DebugLineSection parse_elf64_file(const char *path) {
 
 			fread(debug_line_section.data, current_section_header.sh_size, 1,
 				  elf_file);
+		} else if (strcmp(section_name, ".debug_line_str") == 0) {
+			printf("%s | section num: %d\n", section_name, i);
 
-			break;
+			debug_line_str_section.size = current_section_header.sh_size;
+			debug_line_str_section.data =
+				malloc(current_section_header.sh_size);
+
+			// TODO: Proper error handling or just write a reader util
+			fseek(elf_file, current_section_header.sh_offset, SEEK_SET);
+
+			fread((void *)debug_line_str_section.data,
+				  current_section_header.sh_size, 1, elf_file);
 		}
 	}
 
-	return debug_line_section;
+	return debug_sections;
 }
