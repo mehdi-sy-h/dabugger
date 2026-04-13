@@ -70,7 +70,6 @@ DebugSections parse_elf64_file(const char *path) {
 		exit(EXIT_FAILURE);
 	}
 
-	DebugSections debug_sections = {0};
 	SectionBuffer debug_line_section = {0};
 	SectionBuffer debug_line_str_section = {0};
 
@@ -84,6 +83,7 @@ DebugSections parse_elf64_file(const char *path) {
 			printf("%s | section num: %d\n", section_name, i);
 
 			debug_line_section.size = current_section_header.sh_size;
+			printf("sz: %ld\n", debug_line_section.size);
 			debug_line_section.data = malloc(current_section_header.sh_size);
 
 			// TODO: Proper error handling or just write a reader util
@@ -101,10 +101,13 @@ DebugSections parse_elf64_file(const char *path) {
 			// TODO: Proper error handling or just write a reader util
 			fseek(elf_file, current_section_header.sh_offset, SEEK_SET);
 
-			fread((void *)debug_line_str_section.data,
-				  current_section_header.sh_size, 1, elf_file);
+			fread(debug_line_str_section.data, current_section_header.sh_size,
+				  1, elf_file);
 		}
 	}
+
+	DebugSections debug_sections = {.debug_line = debug_line_section,
+									.debug_line_str = debug_line_str_section};
 
 	return debug_sections;
 }

@@ -23,8 +23,8 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 		// ptrace(PTRACE_TRACEME);
 	} else if (pid > 0) {
 		// Parent process
-		DebugLineSection debug_line_section = parse_elf64_file(argv[1]);
-		parse_debug_line_section(debug_line_section);
+		DebugSections debug_sections = parse_elf64_file(argv[1]);
+		parse_debug_line_section(debug_sections);
 	}
 
 	return EXIT_SUCCESS;

@@ -26,9 +26,12 @@ typedef struct {} DwarfLineContext;
 
 typedef uint8_t InitialLength32; /* Must be less than 0xfffffff0 */
 
-typedef struct __attribute__((packed)) {
-	uint32_t marker; /* Always 0xffffffff */
-	uint64_t length;
+// typedef struct __attribute__((packed)) {
+	// uint32_t marker; /* Always 0xffffffff */
+	// uint64_t length;
+typedef struct {
+	uint8_t marker[4];
+	uint8_t length[8];
 } InitialLength64;
 
 /* See Dwarf 5 Specification 7.22 */

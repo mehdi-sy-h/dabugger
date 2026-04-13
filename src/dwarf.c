@@ -58,7 +58,7 @@ static void read_lnct_path(BinaryReader *debug_line_reader,
 		return;
 	}
 
-	printf("%s", path);
+	printf("%s\n", path);
 	out_entry->path = path;
 }
 
@@ -160,6 +160,7 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 	/* TODO: Put assert guards here (and all around the code base!) */
 	LineNumProgHeader64 header;
 
+	printf("sz: %ld\n", sections->debug_line.size);
 	BinaryReader debug_line_reader = {
 		.cursor = sections->debug_line.data,
 		.remaining = sections->debug_line.size,
@@ -224,6 +225,47 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 	if (header.directories == NULL) {
 		/* TODO: Handle error */
 	}
+
+	/* Vibe slop printout start */
+	/*
+	printf("unit_length (raw): %x %lx\n", header.unit_length.marker,
+		   header.unit_length.length);
+	*/
+
+	printf("unit_length (raw): %02x %02x %02x %02x %02x %02x %02x %02x %02x "
+		   "%02x %02x %02x\n",
+		   header.unit_length.marker[0], header.unit_length.marker[1],
+		   header.unit_length.marker[2], header.unit_length.marker[3],
+		   header.unit_length.length[0], header.unit_length.length[1],
+		   header.unit_length.length[2], header.unit_length.length[3],
+		   header.unit_length.length[4], header.unit_length.length[5],
+		   header.unit_length.length[6], header.unit_length.length[7]);
+	printf("version: %u\n", header.version);
+	printf("address_size: %u\n", header.address_size);
+	printf("segment_selector_size: %u\n", header.segment_selector_size);
+	printf("header_length: %zu\n", header.header_length);
+	printf("minimum_instruction_length: %u\n",
+		   header.minimum_instruction_length);
+	printf("maximum_operations_per_instruction: %u\n",
+		   header.maximum_operations_per_instruction);
+	printf("default_is_stmt: %u\n", header.default_is_stmt);
+	printf("line_base: %d\n", header.line_base);
+	printf("line_range: %u\n", header.line_range);
+	printf("opcode_base: %u\n", header.opcode_base);
+	printf("standard_opcode_lengths:");
+	for (uint8_t i = 0; i < header.opcode_base - 1; i++) {
+		printf(" %u", header.standard_opcode_lengths[i]);
+	}
+	printf("\n");
+	printf("directory_entry_format_count: %u\n",
+		   header.directory_entry_format_count);
+	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
+		printf("  format[%u]: content_type=%ud form_code=%ud\n", i,
+			   header.directory_entry_format[i].content_type,
+			   header.directory_entry_format[i].form_code);
+	}
+	printf("directories_count: %ld\n", header.directories_count);
+	/* Vibe slop printout end */
 
 	for (uint64_t i = 0; i < header.directories_count; i++) {
 		for (uint8_t j = 0; j < header.directory_entry_format_count; j++) {
