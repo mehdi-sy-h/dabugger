@@ -165,7 +165,7 @@ static inline void read_lnct_entries(DwarfLineNumContentEntry *entries,
 		for (uint8_t j = 0; j < format_count; j++) {
 			DwarfLineNumFormatDesc fmt = formats[j];
 			DwarfLineNumContentEntry entry = {0};
-			entries[i] = entry;
+
 			switch (fmt.content_type) {
 			case DW_LNCT_path:
 				printf("[%ld]: ", i);
@@ -189,10 +189,13 @@ static inline void read_lnct_entries(DwarfLineNumContentEntry *entries,
 				/* Skip vendor defined content descriptions */
 				if (fmt.content_type >= DW_LNCT_lo_user &&
 					fmt.content_type <= DW_LNCT_hi_user) {
-					continue;
+					/* TODO: Need to advance reader according to the present
+					 * form codes */
 				}
 				/* TODO: Handle invalid case */;
 			}
+
+			entries[i] = entry;
 		}
 	}
 }
@@ -241,8 +244,8 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 	read_bytes(&debug_line_reader, &header.directory_entry_format_count,
 			   sizeof(header.directory_entry_format_count));
 
-	header.directory_entry_format = calloc(sizeof(DwarfLineNumFormatDesc),
-										   header.directory_entry_format_count);
+	header.directory_entry_format = calloc(header.directory_entry_format_count,
+										   sizeof(DwarfLineNumFormatDesc));
 	if (header.directory_entry_format == NULL) {
 		/* TODO: Handle failure */
 	}
@@ -311,8 +314,8 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 
 	/* Vibe slop printout start */
 	printf("\n--- line num prog header ---\n");
-	printf("unit_length (raw): %x %lx\n", header.unit_length.marker,
-		   header.unit_length.length);
+	printf("unit_length: %x %lx (%ld)\n", header.unit_length.marker,
+		   header.unit_length.length, header.unit_length.length);
 	printf("version: %u\n", header.version);
 	printf("address_size: %u\n", header.address_size);
 	printf("segment_selector_size: %u\n", header.segment_selector_size);
@@ -330,6 +333,7 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 		printf(" %u", header.standard_opcode_lengths[i]);
 	}
 	printf("\n");
+
 	printf("directory_entry_format_count: %u\n",
 		   header.directory_entry_format_count);
 	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
@@ -337,7 +341,8 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 			   header.directory_entry_format[i].content_type,
 			   header.directory_entry_format[i].form_code);
 	}
-	printf("file_names_count: %ld\n", header.file_names_count);
+	printf("directories_count: %ld\n", header.directories_count);
+
 	printf("file_name_entry_format_count: %u\n",
 		   header.file_name_entry_format_count);
 	for (uint8_t i = 0; i < header.file_name_entry_format_count; i++) {
