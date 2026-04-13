@@ -83,7 +83,6 @@ DebugSections parse_elf64_file(const char *path) {
 			printf("%s | section num: %d\n", section_name, i);
 
 			debug_line_section.size = current_section_header.sh_size;
-			printf("sz: %ld\n", debug_line_section.size);
 			debug_line_section.data = malloc(current_section_header.sh_size);
 
 			// TODO: Proper error handling or just write a reader util

@@ -155,12 +155,53 @@ static void read_lnct_md5(BinaryReader *reader, DwarfFormCode form_code,
 	memcpy(out_entry->md5, md5, 16);
 }
 
+static inline void read_lnct_entries(DwarfLineNumContentEntry *entries,
+									 DwarfLineNumFormatDesc *formats,
+									 uint64_t entry_count, uint8_t format_count,
+									 BinaryReader *debug_line_reader,
+									 SectionBuffer *debug_line_str) {
+	printf("\n------\n");
+	for (uint64_t i = 0; i < entry_count; i++) {
+		for (uint8_t j = 0; j < format_count; j++) {
+			DwarfLineNumFormatDesc fmt = formats[j];
+			DwarfLineNumContentEntry entry = {0};
+			entries[i] = entry;
+			switch (fmt.content_type) {
+			case DW_LNCT_path:
+				printf("[%ld]: ", i);
+				read_lnct_path(debug_line_reader, debug_line_str, fmt.form_code,
+							   &entry);
+				break;
+			case DW_LNCT_directory_index:
+				read_lnct_directory_index(debug_line_reader, fmt.form_code,
+										  &entry);
+				break;
+			case DW_LNCT_timestamp:
+				read_lnct_timestamp(debug_line_reader, fmt.form_code, &entry);
+				break;
+			case DW_LNCT_size:
+				read_lnct_size(debug_line_reader, fmt.form_code, &entry);
+				break;
+			case DW_LNCT_MD5:
+				read_lnct_md5(debug_line_reader, fmt.form_code, &entry);
+				break;
+			default:
+				/* Skip vendor defined content descriptions */
+				if (fmt.content_type >= DW_LNCT_lo_user &&
+					fmt.content_type <= DW_LNCT_hi_user) {
+					continue;
+				}
+				/* TODO: Handle invalid case */;
+			}
+		}
+	}
+}
+
 /* TODO: 32 bit parsing is more important than 64 bit! */
 static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 	/* TODO: Put assert guards here (and all around the code base!) */
 	LineNumProgHeader64 header;
 
-	printf("sz: %ld\n", sections->debug_line.size);
 	BinaryReader debug_line_reader = {
 		.cursor = sections->debug_line.data,
 		.remaining = sections->debug_line.size,
@@ -196,6 +237,7 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 
 	read_bytes(&debug_line_reader, header.standard_opcode_lengths,
 			   header.opcode_base - 1);
+
 	read_bytes(&debug_line_reader, &header.directory_entry_format_count,
 			   sizeof(header.directory_entry_format_count));
 
@@ -226,20 +268,51 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 		/* TODO: Handle error */
 	}
 
+	read_lnct_entries(header.directories, header.directory_entry_format,
+					  header.directories_count,
+					  header.directory_entry_format_count, &debug_line_reader,
+					  &sections->debug_line_str);
+
+	/* TODO: Put these reads and allocations in read_lnct_entries too? */
+	read_bytes(&debug_line_reader, &header.file_name_entry_format_count,
+			   sizeof(header.file_name_entry_format_count));
+
+	header.file_name_entry_format = calloc(sizeof(DwarfLineNumFormatDesc),
+										   header.file_name_entry_format_count);
+	if (header.file_name_entry_format == NULL) {
+		/* TODO: Handle failure */
+	}
+
+	for (uint8_t i = 0; i < header.file_name_entry_format_count; i++) {
+		uint64_t content_type_tmp, form_code_tmp;
+
+		read_uleb128(&debug_line_reader, &content_type_tmp);
+		header.file_name_entry_format[i].content_type =
+			(DwarfLineNumContentType)content_type_tmp;
+
+		read_uleb128(&debug_line_reader, &form_code_tmp);
+		header.file_name_entry_format[i].form_code =
+			(DwarfFormCode)form_code_tmp;
+	}
+
+	read_uleb128(&debug_line_reader, &header.file_names_count);
+
+	header.file_names =
+		calloc(header.file_names_count, sizeof(DwarfLineNumContentEntry));
+
+	if (header.file_names == NULL) {
+		/* TODO: Handle error */
+	}
+
+	read_lnct_entries(header.file_names, header.file_name_entry_format,
+					  header.file_names_count,
+					  header.file_name_entry_format_count, &debug_line_reader,
+					  &sections->debug_line_str);
+
 	/* Vibe slop printout start */
-	/*
+	printf("\n--- line num prog header ---\n");
 	printf("unit_length (raw): %x %lx\n", header.unit_length.marker,
 		   header.unit_length.length);
-	*/
-
-	printf("unit_length (raw): %02x %02x %02x %02x %02x %02x %02x %02x %02x "
-		   "%02x %02x %02x\n",
-		   header.unit_length.marker[0], header.unit_length.marker[1],
-		   header.unit_length.marker[2], header.unit_length.marker[3],
-		   header.unit_length.length[0], header.unit_length.length[1],
-		   header.unit_length.length[2], header.unit_length.length[3],
-		   header.unit_length.length[4], header.unit_length.length[5],
-		   header.unit_length.length[6], header.unit_length.length[7]);
 	printf("version: %u\n", header.version);
 	printf("address_size: %u\n", header.address_size);
 	printf("segment_selector_size: %u\n", header.segment_selector_size);
@@ -264,42 +337,16 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 			   header.directory_entry_format[i].content_type,
 			   header.directory_entry_format[i].form_code);
 	}
-	printf("directories_count: %ld\n", header.directories_count);
-	/* Vibe slop printout end */
-
-	for (uint64_t i = 0; i < header.directories_count; i++) {
-		for (uint8_t j = 0; j < header.directory_entry_format_count; j++) {
-			DwarfLineNumFormatDesc fmt = header.directory_entry_format[j];
-			DwarfLineNumContentEntry entry = {0};
-			header.directories[i] = entry;
-			switch (fmt.content_type) {
-			case DW_LNCT_path:
-				read_lnct_path(&debug_line_reader, &sections->debug_line_str,
-							   fmt.form_code, &entry);
-				break;
-			case DW_LNCT_directory_index:
-				read_lnct_directory_index(&debug_line_reader, fmt.form_code,
-										  &entry);
-				break;
-			case DW_LNCT_timestamp:
-				read_lnct_timestamp(&debug_line_reader, fmt.form_code, &entry);
-				break;
-			case DW_LNCT_size:
-				read_lnct_size(&debug_line_reader, fmt.form_code, &entry);
-				break;
-			case DW_LNCT_MD5:
-				read_lnct_md5(&debug_line_reader, fmt.form_code, &entry);
-				break;
-			default:
-				/* Skip vendor defined content descriptions */
-				if (fmt.content_type >= DW_LNCT_lo_user &&
-					fmt.content_type <= DW_LNCT_hi_user) {
-					continue;
-				}
-				/* TODO: Handle invalid case */;
-			}
-		}
+	printf("file_names_count: %ld\n", header.file_names_count);
+	printf("file_name_entry_format_count: %u\n",
+		   header.file_name_entry_format_count);
+	for (uint8_t i = 0; i < header.file_name_entry_format_count; i++) {
+		printf("  format[%u]: content_type=%ud form_code=%ud\n", i,
+			   header.file_name_entry_format[i].content_type,
+			   header.file_name_entry_format[i].form_code);
 	}
+	printf("file_names_count: %ld\n", header.file_names_count);
+	/* Vibe slop printout end */
 
 	return header;
 }
@@ -310,14 +357,16 @@ static void free_line_header64(LineNumProgHeader64 *header) {
 }
 
 void parse_debug_line_section(DebugSections debug_sections) {
-	/* See DWARF 5 Specification Table 6.4 */
+	LineNumProgHeader64 header = alloc_line_header64(&debug_sections);
+
+	/* See DWARF 5 Specification Table 6.4 for initial values */
 	LineNumStateMachine state_machine = {
 		.address = 0,
 		.op_index = 0,
 		.file = 1,
 		.line = 1,
 		.column = 0,
-		/* TODO(obtain from program header): .is_stmt = ... */
+		.is_stmt = header.default_is_stmt,
 		.basic_block = false,
 		.end_sequence = false,
 		.prologue_end = false,
@@ -326,6 +375,5 @@ void parse_debug_line_section(DebugSections debug_sections) {
 		.discriminator = 0,
 	};
 
-	LineNumProgHeader64 header = alloc_line_header64(&debug_sections);
 	free_line_header64(&header);
 }
