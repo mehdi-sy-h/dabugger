@@ -29,7 +29,7 @@ add_executable(${PROJECT_NAME}
 
 target_compile_options(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Debug>:-g3 -Og>
-	$<$<CONFIG:Release>:-O2>
+	$<$<CONFIG:Release>:-O2 -DNDEBUG>
 )
 
 install(TARGETS ${PROJECT_NAME})
