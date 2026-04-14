@@ -201,47 +201,44 @@ static inline void read_lnct_entries(DwarfLineNumContentEntry *entries,
 }
 
 /* TODO: 32 bit parsing is more important than 64 bit! */
-static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
+static LineNumProgHeader64
+alloc_line_header64(DebugSections *sections, BinaryReader *debug_line_reader) {
 	/* TODO: Put assert guards here (and all around the code base!) */
 	LineNumProgHeader64 header;
 
-	BinaryReader debug_line_reader = {
-		.cursor = sections->debug_line.data,
-		.remaining = sections->debug_line.size,
-	};
-
 	/* TODO: Handle read results */
-	read_bytes(&debug_line_reader, &header.unit_length,
+	read_bytes(debug_line_reader, &header.unit_length,
 			   sizeof(header.unit_length));
-	read_bytes(&debug_line_reader, &header.version, sizeof(header.version));
-	read_bytes(&debug_line_reader, &header.address_size,
+	read_bytes(debug_line_reader, &header.version, sizeof(header.version));
+	read_bytes(debug_line_reader, &header.address_size,
 			   sizeof(header.address_size));
-	read_bytes(&debug_line_reader, &header.segment_selector_size,
+	read_bytes(debug_line_reader, &header.segment_selector_size,
 			   sizeof(header.segment_selector_size));
-	read_bytes(&debug_line_reader, &header.header_length,
+	read_bytes(debug_line_reader, &header.header_length,
 			   sizeof(header.header_length));
-	read_bytes(&debug_line_reader, &header.minimum_instruction_length,
+	read_bytes(debug_line_reader, &header.minimum_instruction_length,
 			   sizeof(header.minimum_instruction_length));
-	read_bytes(&debug_line_reader, &header.maximum_operations_per_instruction,
+	read_bytes(debug_line_reader, &header.maximum_operations_per_instruction,
 			   sizeof(header.maximum_operations_per_instruction));
-	read_bytes(&debug_line_reader, &header.default_is_stmt,
+	read_bytes(debug_line_reader, &header.default_is_stmt,
 			   sizeof(header.default_is_stmt));
-	read_bytes(&debug_line_reader, &header.line_base, sizeof(header.line_base));
-	read_bytes(&debug_line_reader, &header.line_range,
+	read_bytes(debug_line_reader, &header.line_base, sizeof(header.line_base));
+	read_bytes(debug_line_reader, &header.line_range,
 			   sizeof(header.line_range));
-	read_bytes(&debug_line_reader, &header.opcode_base,
+	read_bytes(debug_line_reader, &header.opcode_base,
 			   sizeof(header.opcode_base));
 
 	header.standard_opcode_lengths =
+
 		calloc(header.opcode_base - 1, sizeof(uint8_t));
 	if (header.standard_opcode_lengths == NULL) {
 		/* TODO: Handle failure */
 	}
 
-	read_bytes(&debug_line_reader, header.standard_opcode_lengths,
+	read_bytes(debug_line_reader, header.standard_opcode_lengths,
 			   header.opcode_base - 1);
 
-	read_bytes(&debug_line_reader, &header.directory_entry_format_count,
+	read_bytes(debug_line_reader, &header.directory_entry_format_count,
 			   sizeof(header.directory_entry_format_count));
 
 	header.directory_entry_format = calloc(header.directory_entry_format_count,
@@ -253,16 +250,16 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
 		uint64_t content_type_tmp, form_code_tmp;
 
-		read_uleb128(&debug_line_reader, &content_type_tmp);
+		read_uleb128(debug_line_reader, &content_type_tmp);
 		header.directory_entry_format[i].content_type =
 			(DwarfLineNumContentType)content_type_tmp;
 
-		read_uleb128(&debug_line_reader, &form_code_tmp);
+		read_uleb128(debug_line_reader, &form_code_tmp);
 		header.directory_entry_format[i].form_code =
 			(DwarfFormCode)form_code_tmp;
 	}
 
-	read_uleb128(&debug_line_reader, &header.directories_count);
+	read_uleb128(debug_line_reader, &header.directories_count);
 
 	header.directories =
 		calloc(header.directories_count, sizeof(DwarfLineNumContentEntry));
@@ -273,11 +270,11 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 
 	read_lnct_entries(header.directories, header.directory_entry_format,
 					  header.directories_count,
-					  header.directory_entry_format_count, &debug_line_reader,
+					  header.directory_entry_format_count, debug_line_reader,
 					  &sections->debug_line_str);
 
 	/* TODO: Put these reads and allocations in read_lnct_entries too? */
-	read_bytes(&debug_line_reader, &header.file_name_entry_format_count,
+	read_bytes(debug_line_reader, &header.file_name_entry_format_count,
 			   sizeof(header.file_name_entry_format_count));
 
 	header.file_name_entry_format = calloc(sizeof(DwarfLineNumFormatDesc),
@@ -289,16 +286,16 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 	for (uint8_t i = 0; i < header.file_name_entry_format_count; i++) {
 		uint64_t content_type_tmp, form_code_tmp;
 
-		read_uleb128(&debug_line_reader, &content_type_tmp);
+		read_uleb128(debug_line_reader, &content_type_tmp);
 		header.file_name_entry_format[i].content_type =
 			(DwarfLineNumContentType)content_type_tmp;
 
-		read_uleb128(&debug_line_reader, &form_code_tmp);
+		read_uleb128(debug_line_reader, &form_code_tmp);
 		header.file_name_entry_format[i].form_code =
 			(DwarfFormCode)form_code_tmp;
 	}
 
-	read_uleb128(&debug_line_reader, &header.file_names_count);
+	read_uleb128(debug_line_reader, &header.file_names_count);
 
 	header.file_names =
 		calloc(header.file_names_count, sizeof(DwarfLineNumContentEntry));
@@ -309,49 +306,8 @@ static LineNumProgHeader64 alloc_line_header64(DebugSections *sections) {
 
 	read_lnct_entries(header.file_names, header.file_name_entry_format,
 					  header.file_names_count,
-					  header.file_name_entry_format_count, &debug_line_reader,
+					  header.file_name_entry_format_count, debug_line_reader,
 					  &sections->debug_line_str);
-
-	/* Vibe slop printout start */
-	printf("\n--- line num prog header ---\n");
-	printf("unit_length: %x %lx (%ld)\n", header.unit_length.marker,
-		   header.unit_length.length, header.unit_length.length);
-	printf("version: %u\n", header.version);
-	printf("address_size: %u\n", header.address_size);
-	printf("segment_selector_size: %u\n", header.segment_selector_size);
-	printf("header_length: %zu\n", header.header_length);
-	printf("minimum_instruction_length: %u\n",
-		   header.minimum_instruction_length);
-	printf("maximum_operations_per_instruction: %u\n",
-		   header.maximum_operations_per_instruction);
-	printf("default_is_stmt: %u\n", header.default_is_stmt);
-	printf("line_base: %d\n", header.line_base);
-	printf("line_range: %u\n", header.line_range);
-	printf("opcode_base: %u\n", header.opcode_base);
-	printf("standard_opcode_lengths:");
-	for (uint8_t i = 0; i < header.opcode_base - 1; i++) {
-		printf(" %u", header.standard_opcode_lengths[i]);
-	}
-	printf("\n");
-
-	printf("directory_entry_format_count: %u\n",
-		   header.directory_entry_format_count);
-	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
-		printf("  format[%u]: content_type=%ud form_code=%ud\n", i,
-			   header.directory_entry_format[i].content_type,
-			   header.directory_entry_format[i].form_code);
-	}
-	printf("directories_count: %ld\n", header.directories_count);
-
-	printf("file_name_entry_format_count: %u\n",
-		   header.file_name_entry_format_count);
-	for (uint8_t i = 0; i < header.file_name_entry_format_count; i++) {
-		printf("  format[%u]: content_type=%ud form_code=%ud\n", i,
-			   header.file_name_entry_format[i].content_type,
-			   header.file_name_entry_format[i].form_code);
-	}
-	printf("file_names_count: %ld\n", header.file_names_count);
-	/* Vibe slop printout end */
 
 	return header;
 }
@@ -361,9 +317,8 @@ static void free_line_header64(LineNumProgHeader64 *header) {
 	/*free(header->file_name_entry_format);*/
 }
 
-void parse_debug_line_section(DebugSections debug_sections) {
-	LineNumProgHeader64 header = alloc_line_header64(&debug_sections);
-
+static void run_line_num_prog(LineNumProgHeader64 *header,
+							  BinaryReader *debug_line_reader) {
 	/* See DWARF 5 Specification Table 6.4 for initial values */
 	LineNumStateMachine state_machine = {
 		.address = 0,
@@ -371,7 +326,7 @@ void parse_debug_line_section(DebugSections debug_sections) {
 		.file = 1,
 		.line = 1,
 		.column = 0,
-		.is_stmt = header.default_is_stmt,
+		.is_stmt = header->default_is_stmt,
 		.basic_block = false,
 		.end_sequence = false,
 		.prologue_end = false,
@@ -379,6 +334,98 @@ void parse_debug_line_section(DebugSections debug_sections) {
 		.isa = 0,
 		.discriminator = 0,
 	};
+
+	uint64_t line_prog_length =
+		header->unit_length.length - header->header_length;
+	assert(line_prog_length <= debug_line_reader->remaining);
+
+	uint64_t orig_remaining = debug_line_reader->remaining;
+	uint8_t opcode;
+
+	/* TODO: Line number matrix */
+	while ((orig_remaining - debug_line_reader->remaining) < line_prog_length) {
+		ReadResult result = read_bytes(debug_line_reader, &opcode, 1);
+		if (result.status != READ_OK) {
+			/* TODO: Handle read error */
+			return;
+		}
+
+		if (opcode == 0) {
+			/* Extended opcode */
+			switch (opcode) {
+			case DW_LNE_end_sequence:
+				break;
+			case DW_LNE_set_address:
+				break;
+			case DW_LNE_set_discriminator:
+				break;
+			}
+		} else if (opcode < header->opcode_base) {
+			/* Standard opcode */
+			switch (opcode) {
+			case DW_LNS_copy:
+				break;
+			case DW_LNS_advance_pc:
+				break;
+			case DW_LNS_advance_line:
+				break;
+			case DW_LNS_set_file:
+				break;
+			case DW_LNS_set_column:
+				break;
+			case DW_LNS_negate_stmt:
+				state_machine.is_stmt = !state_machine.is_stmt;
+				break;
+			case DW_LNS_set_basic_block:
+				state_machine.basic_block = true;
+				break;
+			case DW_LNS_const_add_pc:
+				break;
+			case DW_LNS_fixed_advance_pc:
+				break;
+			case DW_LNS_set_prologue_end:
+				state_machine.prologue_end = true;
+				break;
+			case DW_LNS_set_epilogue_begin:
+				state_machine.epilogue_begin = true;
+				break;
+			case DW_LNS_set_isa:
+				break;
+			}
+		} else {
+			/* Special opcode */
+			uint8_t adjusted_opcode = opcode - header->opcode_base;
+			uint8_t op_advance = adjusted_opcode / header->line_range;
+
+			state_machine.address +=
+				header->minimum_instruction_length *
+				((state_machine.op_index + op_advance) /
+				 header->maximum_operations_per_instruction);
+
+			state_machine.op_index = (state_machine.op_index + op_advance) %
+									 header->maximum_operations_per_instruction;
+
+			state_machine.line +=
+				header->line_base + (adjusted_opcode % header->line_range);
+
+			state_machine.basic_block = false;
+			state_machine.prologue_end = false;
+			state_machine.epilogue_begin = false;
+			state_machine.discriminator = 0;
+		}
+	}
+}
+
+void parse_debug_line_section(DebugSections debug_sections) {
+	BinaryReader debug_line_reader = {
+		.cursor = debug_sections.debug_line.data,
+		.remaining = debug_sections.debug_line.size,
+	};
+
+	LineNumProgHeader64 header =
+		alloc_line_header64(&debug_sections, &debug_line_reader);
+
+	run_line_num_prog(&header, &debug_line_reader);
 
 	free_line_header64(&header);
 }
