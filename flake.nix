@@ -24,7 +24,12 @@
             pname = "dabugger";
             version = "0.1.0";
             src = ./.;
-            nativeBuildInputs = with pkgs; [ cmake ];
+            nativeBuildInputs = with pkgs; [
+              cmake
+            ];
+            buildInputs = with pkgs; [
+              ncurses
+            ];
           };
         in
         {
