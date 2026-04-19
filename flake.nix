@@ -11,9 +11,9 @@
     in
     {
       devShells.${system}.default = pkgs.mkShell {
+        inputsFrom = [ self.packages.${system}.default ];
         packages = with pkgs; [
           clang-tools
-          cmake
           gdb
           dwarfdump
         ];
