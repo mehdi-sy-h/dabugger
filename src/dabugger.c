@@ -1,5 +1,7 @@
 #include "dwarf.h"
 #include "elf.h"
+#include "tui.h"
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +27,9 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 		// Parent process
 		DebugSections debug_sections = parse_elf64_file(argv[1]);
 		parse_debug_line_section(debug_sections);
+
+		open_tui();
+		close_tui();
 	}
 
 	return EXIT_SUCCESS;

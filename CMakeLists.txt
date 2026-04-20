@@ -25,6 +25,7 @@ add_executable(${PROJECT_NAME}
 	src/elf.c
 	src/dwarf.c
 	src/reader.c
+	src/tui.c
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
@@ -32,7 +33,9 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Release>:-O2 -DNDEBUG>
 )
 
+# TODO: Allow non-wide or curses support (will require guards in tui.h)
 set(CURSES_NEED_NCURSES TRUE)
+set(CURSES_NEED_WIDE TRUE)
 find_package(Curses REQUIRED)
 
 if(Curses_FOUND AND NOT TARGET Curses::Curses)
@@ -45,6 +48,7 @@ if(Curses_FOUND AND NOT TARGET Curses::Curses)
 		)
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Curses::Curses)
+find_library(PANEL_LIBRARY panelw REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE Curses::Curses ${PANEL_LIBRARY})
 
 install(TARGETS ${PROJECT_NAME})
