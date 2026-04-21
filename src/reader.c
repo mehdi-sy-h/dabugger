@@ -1,5 +1,6 @@
 #include "reader.h"
 
+#include <limits.h>
 #include <string.h>
 
 ReadResult advance_reader(BinaryReader *reader, size_t bytes) {
@@ -33,7 +34,7 @@ ReadResult read_uleb128(BinaryReader *reader, uint64_t *out) {
 	*out = 0;
 	do {
 		if (result.bytes_consumed == 10) {
-			result.status = READ_ERR_ULEB_U64_OVERFLOW;
+			result.status = READ_ERR_LEB_U64_OVERFLOW;
 			return result;
 		}
 
@@ -51,8 +52,33 @@ ReadResult read_uleb128(BinaryReader *reader, uint64_t *out) {
 	return result;
 }
 
-ReadResult read_sleb128(BinaryReader *reader, uint64_t *out) {
-	/* TODO: Implement */
+ReadResult read_sleb128(BinaryReader *reader, int64_t *out) {
+	ReadResult result = {0};
+	uint8_t byte;
+	*out = 0;
+	do {
+		if (result.bytes_consumed == 10) {
+			result.status = READ_ERR_LEB_I64_OVERFLOW;
+			return result;
+		}
+
+		ReadResult byte_read_result = read_bytes(reader, &byte, 1);
+
+		if (byte_read_result.status != READ_OK) {
+			/* TODO: Similarly, perhaps more specific error instead */
+			result.status = byte_read_result.status;
+			return result;
+		}
+		*out |= (int64_t)(byte & 0x7f) << ((result.bytes_consumed) * 7);
+		result.bytes_consumed++;
+	} while ((byte & 0x80) != 0);
+
+	if ((result.bytes_consumed * 7 < sizeof(int64_t) * CHAR_BIT) &&
+		((byte & 0x40) != 0)) {
+		*out |= -((int64_t)1 << (result.bytes_consumed * 7));
+	}
+
+	return result;
 }
 
 /* TODO: Copy instead of returning pointer to string */
