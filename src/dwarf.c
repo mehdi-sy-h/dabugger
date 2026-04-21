@@ -322,26 +322,42 @@ static void add_line_info_entry(LineInfoCompUnitTable *line_info_table,
 	/* TODO */
 }
 
+/* See DWARF 5 Specification Table 6.4 for initial values */
+static inline void
+reset_line_num_state_machine(LineNumStateMachine *state_machine,
+							 bool default_is_stmt) {
+	state_machine->address = 0;
+	state_machine->op_index = 0;
+	state_machine->file = 1;
+	state_machine->line = 1;
+	state_machine->column = 0;
+	state_machine->is_stmt = default_is_stmt;
+	state_machine->basic_block = false;
+	state_machine->end_sequence = false;
+	state_machine->prologue_end = false;
+	state_machine->epilogue_begin = false;
+	state_machine->isa = 0;
+	state_machine->discriminator = 0;
+}
+
+/* TODO: Use to replace occurences of address and op_index increments */
+static inline void state_machine_advance_pc(LineNumStateMachine *state_machine,
+											LineNumProgHeader64 *header,
+											uint64_t op_advance) {
+	state_machine->address += header->minimum_instruction_length *
+							  ((state_machine->op_index + op_advance) /
+							   header->maximum_operations_per_instruction);
+	state_machine->op_index = (state_machine->op_index + op_advance) %
+							  header->maximum_operations_per_instruction;
+}
+
 static LineInfoCompUnitTable
 decode_line_num_prog(LineNumProgHeader64 *header,
 					 BinaryReader *debug_line_reader) {
 	LineInfoCompUnitTable line_info_table = {0};
 
-	/* See DWARF 5 Specification Table 6.4 for initial values */
-	LineNumStateMachine state_machine = {
-		.address = 0,
-		.op_index = 0,
-		.file = 1,
-		.line = 1,
-		.column = 0,
-		.is_stmt = header->default_is_stmt,
-		.basic_block = false,
-		.end_sequence = false,
-		.prologue_end = false,
-		.epilogue_begin = false,
-		.isa = 0,
-		.discriminator = 0,
-	};
+	LineNumStateMachine state_machine;
+	reset_line_num_state_machine(&state_machine, header->default_is_stmt);
 
 	uint64_t line_prog_length =
 		header->unit_length.length - header->header_length;
@@ -359,12 +375,34 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 
 		if (opcode == 0) {
 			/* Extended opcode */
-			switch (opcode) {
+			/* TODO: Handle read error */
+			size_t instruction_size = 0;
+			read_uleb128(debug_line_reader, &instruction_size);
+
+			uint8_t extended_opcode = 0;
+			read_bytes(debug_line_reader, &extended_opcode, 1);
+
+			uint64_t discriminator = 0;
+			/* This is architecture dependent, but we use the size_t of the
+			 * debugger machine */
+			size_t address = 0;
+			switch (extended_opcode) {
 			case DW_LNE_end_sequence:
+				state_machine.end_sequence = true;
+				add_line_info_entry(&line_info_table, &state_machine);
+				reset_line_num_state_machine(&state_machine,
+											 header->default_is_stmt);
 				break;
 			case DW_LNE_set_address:
+				read_bytes(debug_line_reader, &address, instruction_size - 1);
+				/* This is the only operation that directly stores an address
+				 * rather than add a delta to it */
+				state_machine.address = address;
+				state_machine.op_index = 0;
 				break;
 			case DW_LNE_set_discriminator:
+				read_uleb128(debug_line_reader, &discriminator);
+				state_machine.discriminator = (uint32_t)discriminator;
 				break;
 			}
 		} else if (opcode < header->opcode_base) {
@@ -374,6 +412,7 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 			uint64_t column = 0;
 			uint64_t isa = 0;
 			uint16_t fixed_advance = 0;
+			int64_t line_increment = 0;
 			switch (opcode) {
 			case DW_LNS_copy:
 				add_line_info_entry(&line_info_table, &state_machine);
@@ -394,8 +433,9 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 					header->maximum_operations_per_instruction;
 				break;
 			case DW_LNS_advance_line:
-				/* TODO: Implement SLEB128. Take single SLEB128 operand and use
-				 * as increment to line register */
+				/* TODO: Handle read error */
+				read_sleb128(debug_line_reader, &line_increment);
+				state_machine.line += line_increment;
 				break;
 			case DW_LNS_set_file:
 				/* TODO: Handle read error */
@@ -415,13 +455,7 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 				break;
 			case DW_LNS_const_add_pc:
 				op_advance = (255 - header->opcode_base) / header->line_range;
-				state_machine.address +=
-					header->minimum_instruction_length *
-					((state_machine.op_index + op_advance) /
-					 header->maximum_operations_per_instruction);
-				state_machine.op_index =
-					(state_machine.op_index + op_advance) %
-					header->maximum_operations_per_instruction;
+				state_machine_advance_pc(&state_machine, header, op_advance);
 				break;
 			case DW_LNS_fixed_advance_pc:
 				/* TODO: Check if this is UB, and also handle read error */
@@ -449,13 +483,7 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 			state_machine.line +=
 				header->line_base + (adjusted_opcode % header->line_range);
 
-			state_machine.address +=
-				header->minimum_instruction_length *
-				((state_machine.op_index + op_advance) /
-				 header->maximum_operations_per_instruction);
-
-			state_machine.op_index = (state_machine.op_index + op_advance) %
-									 header->maximum_operations_per_instruction;
+			state_machine_advance_pc(&state_machine, header, op_advance);
 
 			add_line_info_entry(&line_info_table, &state_machine);
 
