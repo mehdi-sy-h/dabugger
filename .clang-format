@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=https://json.schemastore.org/clang-format-21.x.json
 ---
+Language: C
 BasedOnStyle: LLVM
 UseTab: Always
 IndentWidth: 4
