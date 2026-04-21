@@ -51,6 +51,10 @@ ReadResult read_uleb128(BinaryReader *reader, uint64_t *out) {
 	return result;
 }
 
+ReadResult read_sleb128(BinaryReader *reader, uint64_t *out) {
+	/* TODO: Implement */
+}
+
 /* TODO: Copy instead of returning pointer to string */
 ReadResult read_cstring(BinaryReader *reader, const char **out) {
 	ReadResult result = {0};

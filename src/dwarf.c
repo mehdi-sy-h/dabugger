@@ -317,8 +317,16 @@ static void free_line_header64(LineNumProgHeader64 *header) {
 	/*free(header->file_name_entry_format);*/
 }
 
-static void run_line_num_prog(LineNumProgHeader64 *header,
-							  BinaryReader *debug_line_reader) {
+static void add_line_info_entry(LineInfoCompUnitTable *line_info_table,
+								LineNumStateMachine *state_machine) {
+	/* TODO */
+}
+
+static LineInfoCompUnitTable
+decode_line_num_prog(LineNumProgHeader64 *header,
+					 BinaryReader *debug_line_reader) {
+	LineInfoCompUnitTable line_info_table = {0};
+
 	/* See DWARF 5 Specification Table 6.4 for initial values */
 	LineNumStateMachine state_machine = {
 		.address = 0,
@@ -342,12 +350,11 @@ static void run_line_num_prog(LineNumProgHeader64 *header,
 	uint64_t orig_remaining = debug_line_reader->remaining;
 	uint8_t opcode;
 
-	/* TODO: Line number matrix */
 	while ((orig_remaining - debug_line_reader->remaining) < line_prog_length) {
 		ReadResult result = read_bytes(debug_line_reader, &opcode, 1);
 		if (result.status != READ_OK) {
-			/* TODO: Handle read error */
-			return;
+			/* TODO: Handle read error, goto style */
+			break;
 		}
 
 		if (opcode == 0) {
@@ -362,16 +369,43 @@ static void run_line_num_prog(LineNumProgHeader64 *header,
 			}
 		} else if (opcode < header->opcode_base) {
 			/* Standard opcode */
+			uint64_t op_advance = 0;
+			uint64_t file_index = 0;
+			uint64_t column = 0;
+			uint64_t isa = 0;
+			uint16_t fixed_advance = 0;
 			switch (opcode) {
 			case DW_LNS_copy:
+				add_line_info_entry(&line_info_table, &state_machine);
+				state_machine.discriminator = 0;
+				state_machine.basic_block = false;
+				state_machine.prologue_end = false;
+				state_machine.epilogue_begin = false;
 				break;
 			case DW_LNS_advance_pc:
+				/* TODO: Handle read error */
+				read_uleb128(debug_line_reader, &op_advance);
+				state_machine.address +=
+					header->minimum_instruction_length *
+					((state_machine.op_index + op_advance) /
+					 header->maximum_operations_per_instruction);
+				state_machine.op_index =
+					(state_machine.op_index + op_advance) %
+					header->maximum_operations_per_instruction;
 				break;
 			case DW_LNS_advance_line:
+				/* TODO: Implement SLEB128. Take single SLEB128 operand and use
+				 * as increment to line register */
 				break;
 			case DW_LNS_set_file:
+				/* TODO: Handle read error */
+				read_uleb128(debug_line_reader, &file_index);
+				state_machine.file = (uint32_t)file_index;
 				break;
 			case DW_LNS_set_column:
+				/* TODO: Handle read error */
+				read_uleb128(debug_line_reader, &column);
+				state_machine.column = (uint32_t)column;
 				break;
 			case DW_LNS_negate_stmt:
 				state_machine.is_stmt = !state_machine.is_stmt;
@@ -380,8 +414,20 @@ static void run_line_num_prog(LineNumProgHeader64 *header,
 				state_machine.basic_block = true;
 				break;
 			case DW_LNS_const_add_pc:
+				op_advance = (255 - header->opcode_base) / header->line_range;
+				state_machine.address +=
+					header->minimum_instruction_length *
+					((state_machine.op_index + op_advance) /
+					 header->maximum_operations_per_instruction);
+				state_machine.op_index =
+					(state_machine.op_index + op_advance) %
+					header->maximum_operations_per_instruction;
 				break;
 			case DW_LNS_fixed_advance_pc:
+				/* TODO: Check if this is UB, and also handle read error */
+				read_bytes(debug_line_reader, &fixed_advance, 2);
+				state_machine.address += fixed_advance;
+				state_machine.op_index = 0;
 				break;
 			case DW_LNS_set_prologue_end:
 				state_machine.prologue_end = true;
@@ -390,12 +436,18 @@ static void run_line_num_prog(LineNumProgHeader64 *header,
 				state_machine.epilogue_begin = true;
 				break;
 			case DW_LNS_set_isa:
+				/* TODO: Handle read error */
+				read_uleb128(debug_line_reader, &isa);
+				state_machine.isa = (uint16_t)isa;
 				break;
 			}
 		} else {
 			/* Special opcode */
 			uint8_t adjusted_opcode = opcode - header->opcode_base;
 			uint8_t op_advance = adjusted_opcode / header->line_range;
+
+			state_machine.line +=
+				header->line_base + (adjusted_opcode % header->line_range);
 
 			state_machine.address +=
 				header->minimum_instruction_length *
@@ -405,8 +457,7 @@ static void run_line_num_prog(LineNumProgHeader64 *header,
 			state_machine.op_index = (state_machine.op_index + op_advance) %
 									 header->maximum_operations_per_instruction;
 
-			state_machine.line +=
-				header->line_base + (adjusted_opcode % header->line_range);
+			add_line_info_entry(&line_info_table, &state_machine);
 
 			state_machine.basic_block = false;
 			state_machine.prologue_end = false;
@@ -414,6 +465,8 @@ static void run_line_num_prog(LineNumProgHeader64 *header,
 			state_machine.discriminator = 0;
 		}
 	}
+
+	return line_info_table;
 }
 
 void parse_debug_line_section(DebugSections debug_sections) {
@@ -425,7 +478,8 @@ void parse_debug_line_section(DebugSections debug_sections) {
 	LineNumProgHeader64 header =
 		alloc_line_header64(&debug_sections, &debug_line_reader);
 
-	run_line_num_prog(&header, &debug_line_reader);
+	LineInfoCompUnitTable line_info_table =
+		decode_line_num_prog(&header, &debug_line_reader);
 
 	free_line_header64(&header);
 }

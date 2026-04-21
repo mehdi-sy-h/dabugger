@@ -24,9 +24,9 @@ extern ReadResult advance_reader(BinaryReader *reader, size_t bytes);
 
 extern ReadResult read_bytes(BinaryReader *reader, void *out, size_t n);
 
-extern ReadResult read_uleb128(BinaryReader *reader, uint64_t *value);
+extern ReadResult read_uleb128(BinaryReader *reader, uint64_t *out);
 
-extern ReadResult read_sleb128(BinaryReader *reader, uint64_t *value);
+extern ReadResult read_sleb128(BinaryReader *reader, uint64_t *out);
 
 extern ReadResult read_cstring(BinaryReader *reader, const char** out);
 

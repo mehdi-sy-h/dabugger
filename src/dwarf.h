@@ -22,7 +22,35 @@ typedef struct {
 	bool epilogue_begin;
 } LineNumStateMachine;
 
-typedef struct {} DwarfLineContext;
+/* TODO: Define and use this and pass it around static functions in dwarf.c */
+typedef struct {
+} DwarfLineContext;
+
+typedef struct {
+	size_t address;
+	uint64_t op_index;
+	uint32_t file;
+	uint32_t line;
+	uint32_t column;
+	uint32_t discriminator;
+	bool end_sequence;
+	bool is_stmt;
+	bool basic_block;
+	bool prologue_end;
+	bool epilogue_begin;
+} LineInfoEntry;
+
+typedef struct {
+	size_t entry_count;
+	LineInfoEntry *entries;
+} LineInfoSequence;
+
+/* The line number information for a particular compilation unit referenced
+ * in the inferior executable's `.debug_line` section. */
+typedef struct {
+	size_t sequences_count;
+	LineInfoSequence *sequences;
+} LineInfoCompUnitTable;
 
 typedef uint8_t InitialLength32; /* Must be less than 0xfffffff0 */
 
@@ -44,31 +72,31 @@ typedef enum {
 
 /* See Dwarf 5 Specification 7.5.5 */
 typedef enum {
-	DW_FORM_data1      = 0x0b,
-	DW_FORM_data2      = 0x05,
-	DW_FORM_data4      = 0x06,
-	DW_FORM_data8      = 0x07,
-	DW_FORM_data16     = 0x1e,
-	DW_FORM_sdata      = 0x0d,
-	DW_FORM_udata      = 0x0f,
+	DW_FORM_data1 = 0x0b,
+	DW_FORM_data2 = 0x05,
+	DW_FORM_data4 = 0x06,
+	DW_FORM_data8 = 0x07,
+	DW_FORM_data16 = 0x1e,
+	DW_FORM_sdata = 0x0d,
+	DW_FORM_udata = 0x0f,
 
-	DW_FORM_string     = 0x08,
-	DW_FORM_strp       = 0x0e,
-	DW_FORM_line_strp  = 0x1f,
-	DW_FORM_strp_sup   = 0x1d,
+	DW_FORM_string = 0x08,
+	DW_FORM_strp = 0x0e,
+	DW_FORM_line_strp = 0x1f,
+	DW_FORM_strp_sup = 0x1d,
 
-	DW_FORM_strx       = 0x1a,
-	DW_FORM_strx1      = 0x25,
-	DW_FORM_strx2      = 0x26,
-	DW_FORM_strx3      = 0x27,
-	DW_FORM_strx4      = 0x28,
+	DW_FORM_strx = 0x1a,
+	DW_FORM_strx1 = 0x25,
+	DW_FORM_strx2 = 0x26,
+	DW_FORM_strx3 = 0x27,
+	DW_FORM_strx4 = 0x28,
 
-	DW_FORM_block      = 0x09,
-	DW_FORM_block1     = 0x0a,
-	DW_FORM_block2     = 0x03,
-	DW_FORM_block4     = 0x04,
+	DW_FORM_block = 0x09,
+	DW_FORM_block1 = 0x0a,
+	DW_FORM_block2 = 0x03,
+	DW_FORM_block4 = 0x04,
 
-	DW_FORM_flag       = 0x0c,
+	DW_FORM_flag = 0x0c,
 
 	DW_FORM_sec_offset = 0x17,
 } DwarfFormCode;
@@ -83,7 +111,7 @@ typedef struct {
 /* Not all the fields are necessarily defined for a given entry.
  * But they are all zero initialized, including fields that are undefined. */
 typedef struct {
-	const char* path;
+	const char *path;
 	uint64_t directory_index;
 	uint64_t timestamp;
 	uint64_t size;
