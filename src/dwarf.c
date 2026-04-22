@@ -324,6 +324,16 @@ static void free_line_header64(LineNumProgHeader64 *header) {
 
 static void add_line_info_entry(LineInfoCompUnitTable *line_info_table,
 								LineNumStateMachine *state_machine) {
+	/* Print state_machine values */
+	printf("addr: 0x%zx, f: %u, line: %u, col: %u, "
+		   "disc: %u, block: %b, stmt: %b, endseq: %b, "
+		   "prologend: %b, epibegin: %b\n\n",
+		   state_machine->address, state_machine->file, state_machine->line,
+		   state_machine->column, state_machine->discriminator,
+		   state_machine->basic_block, state_machine->is_stmt,
+		   state_machine->end_sequence, state_machine->prologue_end,
+		   state_machine->epilogue_begin);
+
 	/* TODO */
 }
 
@@ -345,7 +355,6 @@ reset_line_num_state_machine(LineNumStateMachine *state_machine,
 	state_machine->discriminator = 0;
 }
 
-/* TODO: Use to replace occurences of address and op_index increments */
 static inline void state_machine_advance_pc(LineNumStateMachine *state_machine,
 											LineNumProgHeader64 *header,
 											uint64_t op_advance) {
@@ -364,8 +373,14 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 	LineNumStateMachine state_machine;
 	reset_line_num_state_machine(&state_machine, header->default_is_stmt);
 
+	/* Unit length does not count the size of the unit length value itself.
+	 * Likewise the header length only counts starting from after the header
+	 * length value up until the end of the header.
+	 * See DWARF 5 Specification Section 6.2.4 Page 154 */
 	uint64_t line_prog_length =
-		header->unit_length.length - header->header_length;
+		header->unit_length.length - sizeof(header->version) -
+		sizeof(header->address_size) - sizeof(header->segment_selector_size) -
+		sizeof(header->header_length) - header->header_length;
 	assert(line_prog_length <= debug_line_reader->remaining);
 
 	uint64_t orig_remaining = debug_line_reader->remaining;
