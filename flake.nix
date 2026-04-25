@@ -15,6 +15,7 @@
         packages = with pkgs; [
           clang-tools
           gdb
+          lldb
           dwarfdump
         ];
       };
