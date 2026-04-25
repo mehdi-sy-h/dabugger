@@ -51,4 +51,9 @@ endif()
 find_library(PANEL_LIBRARY panelw REQUIRED)
 target_link_libraries(${PROJECT_NAME} PRIVATE Curses::Curses ${PANEL_LIBRARY})
 
+set(ZYDIS_FEATURE_ENCODER OFF)
+find_package(Zydis REQUIRED)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE Zydis)
+
 install(TARGETS ${PROJECT_NAME})

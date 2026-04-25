@@ -30,6 +30,7 @@
             ];
             buildInputs = with pkgs; [
               ncurses
+              zydis
             ];
           };
         in
