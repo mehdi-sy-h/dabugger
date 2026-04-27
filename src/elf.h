@@ -1,7 +1,6 @@
 #ifndef _DABUGGER_ELF_H
 #define _DABUGGER_ELF_H
 
-#include "reader.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -12,9 +11,15 @@ typedef struct {
 
 typedef struct {
 	SectionBuffer debug_line;
+	SectionBuffer debug_str;
 	SectionBuffer debug_line_str;
-} DebugSections;
+} ProgramSections;
 
-extern DebugSections parse_elf64_file(const char *path);
+typedef struct {
+	ProgramSections sections;
+	size_t entry_point;
+} ProgramData;
+
+ProgramData parse_elf_file(const char *path);
 
 #endif /* _DABUGGER_ELF_H */

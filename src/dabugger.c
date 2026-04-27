@@ -34,8 +34,8 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 		waitpid(pid, &status, __WALL);
 		ptrace(PTRACE_SETOPTIONS, pid, NULL, PTRACE_O_EXITKILL);
 
-		DebugSections debug_sections = parse_elf64_file(argv[1]);
-		parse_debug_line_section(debug_sections);
+		ProgramData program_data = parse_elf_file(argv[1]);
+		parse_debug_line_section(program_data.sections);
 
 		open_tui();
 		close_tui();

@@ -167,6 +167,6 @@ typedef enum {
 	DW_LNE_hi_user = 0xff,
 } DwarfLineExtendedOpcode;
 
-extern void parse_debug_line_section(DebugSections debug_sections);
+void parse_debug_line_section(ProgramSections sections);
 
 #endif /* _DABUGGER_DWARF_H */

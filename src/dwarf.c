@@ -162,11 +162,11 @@ static void read_lnct_md5(BinaryReader *reader, DwarfFormCode form_code,
 	memcpy(out_entry->md5, md5, 16);
 }
 
-static inline void read_lnct_entries(DwarfLineNumContentEntry *entries,
-									 DwarfLineNumFormatDesc *formats,
-									 uint64_t entry_count, uint8_t format_count,
-									 BinaryReader *debug_line_reader,
-									 SectionBuffer *debug_line_str) {
+static void read_lnct_entries(DwarfLineNumContentEntry *entries,
+							  DwarfLineNumFormatDesc *formats,
+							  uint64_t entry_count, uint8_t format_count,
+							  BinaryReader *debug_line_reader,
+							  SectionBuffer *debug_line_str) {
 	printf("\n------\n");
 	for (uint64_t i = 0; i < entry_count; i++) {
 		DwarfLineNumContentEntry entry = {0};
@@ -209,7 +209,8 @@ static inline void read_lnct_entries(DwarfLineNumContentEntry *entries,
 
 /* TODO: 32 bit parsing is more important than 64 bit! */
 static LineNumProgHeader64
-alloc_line_header64(DebugSections *sections, BinaryReader *debug_line_reader) {
+alloc_line_header64(ProgramSections *sections,
+					BinaryReader *debug_line_reader) {
 	/* TODO: Put assert guards here (and all around the code base!) */
 	LineNumProgHeader64 header;
 
@@ -519,14 +520,14 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 	return line_info_table;
 }
 
-void parse_debug_line_section(DebugSections debug_sections) {
+void parse_debug_line_section(ProgramSections sections) {
 	BinaryReader debug_line_reader = {
-		.cursor = debug_sections.debug_line.data,
-		.remaining = debug_sections.debug_line.size,
+		.cursor = sections.debug_line.data,
+		.remaining = sections.debug_line.size,
 	};
 
 	LineNumProgHeader64 header =
-		alloc_line_header64(&debug_sections, &debug_line_reader);
+		alloc_line_header64(&sections, &debug_line_reader);
 
 	LineInfoCompUnitTable line_info_table =
 		decode_line_num_prog(&header, &debug_line_reader);
