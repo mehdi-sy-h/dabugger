@@ -1,5 +1,5 @@
-#ifndef _DABUGGER_READER_H
-#define _DABUGGER_READER_H
+#ifndef DABUGGER_READER_H
+#define DABUGGER_READER_H
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -31,4 +31,4 @@ extern ReadResult read_sleb128(BinaryReader *reader, int64_t *out);
 
 extern ReadResult read_cstring(BinaryReader *reader, const char** out);
 
-#endif /* _DABUGGER_READER_H */
+#endif /* DABUGGER_READER_H */

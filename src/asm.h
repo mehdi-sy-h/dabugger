@@ -1,4 +1,4 @@
-#ifndef _DABUGGER_ASM_H
-#define _DABUGGER_ASM_H
+#ifndef DABUGGER_ASM_H
+#define DABUGGER_ASM_H
 
-#endif /* _DABUGGER_ASM_H */
+#endif /* DABUGGER_ASM_H */

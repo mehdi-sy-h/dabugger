@@ -1,7 +1,7 @@
-#ifndef _DABUGGER_TUI_H
-#define _DABUGGER_TUI_H
+#ifndef DABUGGER_TUI_H
+#define DABUGGER_TUI_H
 
 int open_tui();
 int close_tui();
 
-#endif /* _DABUGGER_TUI_H */
+#endif /* DABUGGER_TUI_H */

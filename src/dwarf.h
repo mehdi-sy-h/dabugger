@@ -1,5 +1,5 @@
-#ifndef _DABUGGER_DWARF_H
-#define _DABUGGER_DWARF_H
+#ifndef DABUGGER_DWARF_H
+#define DABUGGER_DWARF_H
 
 #include "elf.h"
 
@@ -169,4 +169,4 @@ typedef enum {
 
 void parse_debug_line_section(ProgramSections sections);
 
-#endif /* _DABUGGER_DWARF_H */
+#endif /* DABUGGER_DWARF_H */

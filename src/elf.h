@@ -1,5 +1,5 @@
-#ifndef _DABUGGER_ELF_H
-#define _DABUGGER_ELF_H
+#ifndef DABUGGER_ELF_H
+#define DABUGGER_ELF_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -22,4 +22,4 @@ typedef struct {
 
 ProgramData parse_elf_file(const char *path);
 
-#endif /* _DABUGGER_ELF_H */
+#endif /* DABUGGER_ELF_H */
