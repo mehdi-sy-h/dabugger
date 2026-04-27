@@ -88,6 +88,7 @@ static void read_lnct_directory_index(BinaryReader *reader,
 
 static void read_lnct_timestamp(BinaryReader *reader, DwarfFormCode form_code,
 								DwarfLineNumContentEntry *out_entry) {
+	/* TODO: Fix for big endian */
 	uint64_t timestamp;
 	ReadResult result;
 
@@ -117,6 +118,7 @@ static void read_lnct_timestamp(BinaryReader *reader, DwarfFormCode form_code,
 }
 static void read_lnct_size(BinaryReader *reader, DwarfFormCode form_code,
 						   DwarfLineNumContentEntry *out_entry) {
+	/* Fix for big endian */
 	uint64_t size;
 	ReadResult result;
 
@@ -167,9 +169,10 @@ static inline void read_lnct_entries(DwarfLineNumContentEntry *entries,
 									 SectionBuffer *debug_line_str) {
 	printf("\n------\n");
 	for (uint64_t i = 0; i < entry_count; i++) {
+		DwarfLineNumContentEntry entry = {0};
 		for (uint8_t j = 0; j < format_count; j++) {
 			DwarfLineNumFormatDesc fmt = formats[j];
-			DwarfLineNumContentEntry entry = {0};
+			/* TODO: Fix */
 
 			switch (fmt.content_type) {
 			case DW_LNCT_path:
@@ -199,9 +202,8 @@ static inline void read_lnct_entries(DwarfLineNumContentEntry *entries,
 				}
 				/* TODO: Handle invalid case */;
 			}
-
-			entries[i] = entry;
 		}
+		entries[i] = entry;
 	}
 }
 
@@ -282,8 +284,8 @@ alloc_line_header64(DebugSections *sections, BinaryReader *debug_line_reader) {
 	read_bytes(debug_line_reader, &header.file_name_entry_format_count,
 			   sizeof(header.file_name_entry_format_count));
 
-	header.file_name_entry_format = calloc(sizeof(DwarfLineNumFormatDesc),
-										   header.file_name_entry_format_count);
+	header.file_name_entry_format = calloc(header.file_name_entry_format_count,
+										   sizeof(DwarfLineNumFormatDesc));
 	if (header.file_name_entry_format == NULL) {
 		/* TODO: Handle failure */
 	}
@@ -327,7 +329,7 @@ static void add_line_info_entry(LineInfoCompUnitTable *line_info_table,
 	/* Print state_machine values */
 	printf("addr: 0x%zx, f: %u, line: %u, col: %u, "
 		   "disc: %u, block: %b, stmt: %b, endseq: %b, "
-		   "prologend: %b, epibegin: %b\n\n",
+		   "prologend: %b, epibegin: %b\n",
 		   state_machine->address, state_machine->file, state_machine->line,
 		   state_machine->column, state_machine->discriminator,
 		   state_machine->basic_block, state_machine->is_stmt,
