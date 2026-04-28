@@ -35,7 +35,7 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 		ptrace(PTRACE_SETOPTIONS, pid, NULL, PTRACE_O_EXITKILL);
 
 		ProgramData program_data = parse_elf_file(argv[1]);
-		parse_debug_line_section(program_data.sections);
+		LineInfo line_info = parse_debug_line_section(program_data.sections);
 
 		open_tui();
 		close_tui();

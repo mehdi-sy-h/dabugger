@@ -50,6 +50,7 @@ ProgramData parse_elf_file(const char *path) {
 		goto error;
 	}
 
+	/* TODO: Handle malloc errors */
 	Elf64_Shdr *section_header =
 		malloc(elf_header.e_shentsize * elf_header.e_shnum);
 

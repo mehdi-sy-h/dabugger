@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* TODO: Define and use this and pass it around static functions in dwarf.c */
+typedef struct {
+} DwarfLineContext;
+
 static void read_lnct_path(BinaryReader *debug_line_reader,
 						   SectionBuffer *debug_line_str_buffer,
 						   DwarfFormCode form_code,
@@ -325,9 +329,56 @@ static void free_line_header64(LineNumProgHeader64 *header) {
 	/*free(header->file_name_entry_format);*/
 }
 
-static void add_line_info_entry(LineInfoCompUnitTable *line_info_table,
-								LineNumStateMachine *state_machine) {
-	/* Print state_machine values */
+/* Successive insertions must be monotonically increasing in the
+ * operation pointer (i.e. address for non-VLIW architectures). */
+static void append_line_info_entry(LineInfoCompUnitTable *line_info_table,
+								   LineNumStateMachine *state_machine) {
+	LineInfoSequence *sequence = NULL;
+
+	if (state_machine->end_sequence || line_info_table->sequences_count == 0) {
+		line_info_table->sequences_count += 1;
+		line_info_table->sequences = reallocarray(
+			line_info_table->sequences, line_info_table->sequences_count,
+			sizeof(LineInfoSequence));
+
+		if (line_info_table->sequences == NULL) {
+			/* TODO */
+		}
+
+		sequence =
+			&line_info_table->sequences[line_info_table->sequences_count - 1];
+		sequence->entry_count = 0;
+		sequence->entries = NULL;
+		printf("(new seq) ");
+	} else {
+		/* The commented invariant above means we don't have to search for the
+		 * containing sequence. We know that it must be the last. */
+		sequence =
+			&line_info_table->sequences[line_info_table->sequences_count - 1];
+		printf("(same seq) ");
+	}
+
+	sequence->entry_count += 1;
+	sequence->entries = reallocarray(sequence->entries, sequence->entry_count,
+									 sizeof(LineInfoEntry));
+
+	if (sequence->entries == NULL) {
+		/* TODO */
+	}
+
+	LineInfoEntry *entry = &sequence->entries[sequence->entry_count - 1];
+	entry->address = state_machine->address;
+	entry->op_index = state_machine->op_index;
+	entry->file = state_machine->file;
+	entry->line = state_machine->line;
+	entry->column = state_machine->column;
+	entry->discriminator = state_machine->discriminator;
+	entry->end_sequence = state_machine->end_sequence;
+	entry->is_stmt = state_machine->is_stmt;
+	entry->basic_block = state_machine->basic_block;
+	entry->prologue_end = state_machine->prologue_end;
+	entry->epilogue_begin = state_machine->epilogue_begin;
+
 	printf("addr: 0x%zx, f: %u, line: %u, col: %u, "
 		   "disc: %u, block: %b, stmt: %b, endseq: %b, "
 		   "prologend: %b, epibegin: %b\n",
@@ -336,8 +387,6 @@ static void add_line_info_entry(LineInfoCompUnitTable *line_info_table,
 		   state_machine->basic_block, state_machine->is_stmt,
 		   state_machine->end_sequence, state_machine->prologue_end,
 		   state_machine->epilogue_begin);
-
-	/* TODO */
 }
 
 /* See DWARF 5 Specification Table 6.4 for initial values */
@@ -412,7 +461,7 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 			switch (extended_opcode) {
 			case DW_LNE_end_sequence:
 				state_machine.end_sequence = true;
-				add_line_info_entry(&line_info_table, &state_machine);
+				append_line_info_entry(&line_info_table, &state_machine);
 				reset_line_num_state_machine(&state_machine,
 											 header->default_is_stmt);
 				break;
@@ -438,7 +487,7 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 			int64_t line_increment = 0;
 			switch (opcode) {
 			case DW_LNS_copy:
-				add_line_info_entry(&line_info_table, &state_machine);
+				append_line_info_entry(&line_info_table, &state_machine);
 				state_machine.discriminator = 0;
 				state_machine.basic_block = false;
 				state_machine.prologue_end = false;
@@ -504,11 +553,12 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 			uint8_t op_advance = adjusted_opcode / header->line_range;
 
 			state_machine.line +=
-				header->line_base + (adjusted_opcode % header->line_range);
+				(uint32_t)(header->line_base +
+						   (adjusted_opcode % header->line_range));
 
 			state_machine_advance_pc(&state_machine, header, op_advance);
 
-			add_line_info_entry(&line_info_table, &state_machine);
+			append_line_info_entry(&line_info_table, &state_machine);
 
 			state_machine.basic_block = false;
 			state_machine.prologue_end = false;
@@ -520,7 +570,7 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 	return line_info_table;
 }
 
-void parse_debug_line_section(ProgramSections sections) {
+LineInfo parse_debug_line_section(ProgramSections sections) {
 	BinaryReader debug_line_reader = {
 		.cursor = sections.debug_line.data,
 		.remaining = sections.debug_line.size,

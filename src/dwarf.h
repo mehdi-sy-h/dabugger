@@ -22,10 +22,6 @@ typedef struct {
 	bool epilogue_begin;
 } LineNumStateMachine;
 
-/* TODO: Define and use this and pass it around static functions in dwarf.c */
-typedef struct {
-} DwarfLineContext;
-
 typedef struct {
 	size_t address;
 	uint64_t op_index;
@@ -51,6 +47,11 @@ typedef struct {
 	size_t sequences_count;
 	LineInfoSequence *sequences;
 } LineInfoCompUnitTable;
+
+typedef struct {
+	size_t comp_unit_count;
+	LineInfoCompUnitTable *comp_unit_tables;
+} LineInfo;
 
 typedef uint8_t InitialLength32; /* Must be less than 0xfffffff0 */
 
@@ -167,6 +168,6 @@ typedef enum {
 	DW_LNE_hi_user = 0xff,
 } DwarfLineExtendedOpcode;
 
-void parse_debug_line_section(ProgramSections sections);
+LineInfo parse_debug_line_section(ProgramSections sections);
 
 #endif /* DABUGGER_DWARF_H */
