@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
@@ -35,7 +36,14 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 		ptrace(PTRACE_SETOPTIONS, pid, NULL, PTRACE_O_EXITKILL);
 
 		ProgramData program_data = parse_elf_file(argv[1]);
-		LineInfo line_info = parse_debug_line_section(program_data.sections);
+		LineInfo *line_info = parse_debug_line_section(program_data.sections);
+
+		printf("Parsed %zu compilation units:\n", line_info->comp_unit_count);
+		for (size_t i = 0; i < line_info->comp_unit_count; i++) {
+			const LineInfoCompUnit *comp_unit = &line_info->comp_units[i];
+			const char *file_name = comp_unit->header->file_names[0].path;
+			printf("%s\n", file_name);
+		}
 
 		open_tui();
 		close_tui();

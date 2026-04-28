@@ -62,7 +62,7 @@ static void read_lnct_path(BinaryReader *debug_line_reader,
 		return;
 	}
 
-	printf("%s\n", path);
+	/*printf("%s\n", path);*/
 	out_entry->path = path;
 }
 
@@ -171,7 +171,7 @@ static void read_lnct_entries(DwarfLineNumContentEntry *entries,
 							  uint64_t entry_count, uint8_t format_count,
 							  BinaryReader *debug_line_reader,
 							  SectionBuffer *debug_line_str) {
-	printf("\n------\n");
+	/*printf("\n------\n");*/
 	for (uint64_t i = 0; i < entry_count; i++) {
 		DwarfLineNumContentEntry entry = {0};
 		for (uint8_t j = 0; j < format_count; j++) {
@@ -180,7 +180,7 @@ static void read_lnct_entries(DwarfLineNumContentEntry *entries,
 
 			switch (fmt.content_type) {
 			case DW_LNCT_path:
-				printf("[%ld]: ", i);
+				/*printf("[%ld]: ", i);*/
 				read_lnct_path(debug_line_reader, debug_line_str, fmt.form_code,
 							   &entry);
 				break;
@@ -212,113 +212,114 @@ static void read_lnct_entries(DwarfLineNumContentEntry *entries,
 }
 
 /* TODO: 32 bit parsing is more important than 64 bit! */
-static LineNumProgHeader64
-alloc_line_header64(ProgramSections *sections,
+static LineNumProgHeader64 *
+parse_line_header64(ProgramSections *sections,
 					BinaryReader *debug_line_reader) {
 	/* TODO: Put assert guards here (and all around the code base!) */
-	LineNumProgHeader64 header;
+	LineNumProgHeader64 *header = calloc(1, sizeof(LineNumProgHeader64));
 
 	/* TODO: Handle read results */
-	read_bytes(debug_line_reader, &header.unit_length,
-			   sizeof(header.unit_length));
-	read_bytes(debug_line_reader, &header.version, sizeof(header.version));
-	read_bytes(debug_line_reader, &header.address_size,
-			   sizeof(header.address_size));
-	read_bytes(debug_line_reader, &header.segment_selector_size,
-			   sizeof(header.segment_selector_size));
-	read_bytes(debug_line_reader, &header.header_length,
-			   sizeof(header.header_length));
-	read_bytes(debug_line_reader, &header.minimum_instruction_length,
-			   sizeof(header.minimum_instruction_length));
-	read_bytes(debug_line_reader, &header.maximum_operations_per_instruction,
-			   sizeof(header.maximum_operations_per_instruction));
-	read_bytes(debug_line_reader, &header.default_is_stmt,
-			   sizeof(header.default_is_stmt));
-	read_bytes(debug_line_reader, &header.line_base, sizeof(header.line_base));
-	read_bytes(debug_line_reader, &header.line_range,
-			   sizeof(header.line_range));
-	read_bytes(debug_line_reader, &header.opcode_base,
-			   sizeof(header.opcode_base));
+	read_bytes(debug_line_reader, &header->unit_length,
+			   sizeof(header->unit_length));
+	read_bytes(debug_line_reader, &header->version, sizeof(header->version));
+	read_bytes(debug_line_reader, &header->address_size,
+			   sizeof(header->address_size));
+	read_bytes(debug_line_reader, &header->segment_selector_size,
+			   sizeof(header->segment_selector_size));
+	read_bytes(debug_line_reader, &header->header_length,
+			   sizeof(header->header_length));
+	read_bytes(debug_line_reader, &header->minimum_instruction_length,
+			   sizeof(header->minimum_instruction_length));
+	read_bytes(debug_line_reader, &header->maximum_operations_per_instruction,
+			   sizeof(header->maximum_operations_per_instruction));
+	read_bytes(debug_line_reader, &header->default_is_stmt,
+			   sizeof(header->default_is_stmt));
+	read_bytes(debug_line_reader, &header->line_base,
+			   sizeof(header->line_base));
+	read_bytes(debug_line_reader, &header->line_range,
+			   sizeof(header->line_range));
+	read_bytes(debug_line_reader, &header->opcode_base,
+			   sizeof(header->opcode_base));
 
-	header.standard_opcode_lengths =
+	header->standard_opcode_lengths =
 
-		calloc(header.opcode_base - 1, sizeof(uint8_t));
-	if (header.standard_opcode_lengths == NULL) {
+		calloc(header->opcode_base - 1, sizeof(uint8_t));
+	if (header->standard_opcode_lengths == NULL) {
 		/* TODO: Handle failure */
 	}
 
-	read_bytes(debug_line_reader, header.standard_opcode_lengths,
-			   header.opcode_base - 1);
+	read_bytes(debug_line_reader, header->standard_opcode_lengths,
+			   header->opcode_base - 1);
 
-	read_bytes(debug_line_reader, &header.directory_entry_format_count,
-			   sizeof(header.directory_entry_format_count));
+	read_bytes(debug_line_reader, &header->directory_entry_format_count,
+			   sizeof(header->directory_entry_format_count));
 
-	header.directory_entry_format = calloc(header.directory_entry_format_count,
-										   sizeof(DwarfLineNumFormatDesc));
-	if (header.directory_entry_format == NULL) {
+	header->directory_entry_format = calloc(
+		header->directory_entry_format_count, sizeof(DwarfLineNumFormatDesc));
+	if (header->directory_entry_format == NULL) {
 		/* TODO: Handle failure */
 	}
 
-	for (uint8_t i = 0; i < header.directory_entry_format_count; i++) {
+	for (uint8_t i = 0; i < header->directory_entry_format_count; i++) {
 		uint64_t content_type_tmp, form_code_tmp;
 
 		read_uleb128(debug_line_reader, &content_type_tmp);
-		header.directory_entry_format[i].content_type =
+		header->directory_entry_format[i].content_type =
 			(DwarfLineNumContentType)content_type_tmp;
 
 		read_uleb128(debug_line_reader, &form_code_tmp);
-		header.directory_entry_format[i].form_code =
+		header->directory_entry_format[i].form_code =
 			(DwarfFormCode)form_code_tmp;
 	}
 
-	read_uleb128(debug_line_reader, &header.directories_count);
+	read_uleb128(debug_line_reader, &header->directories_count);
 
-	header.directories =
-		calloc(header.directories_count, sizeof(DwarfLineNumContentEntry));
+	header->directories =
+		calloc(header->directories_count, sizeof(DwarfLineNumContentEntry));
 
-	if (header.directories == NULL) {
+	if (header->directories == NULL) {
 		/* TODO: Handle error */
 	}
 
-	read_lnct_entries(header.directories, header.directory_entry_format,
-					  header.directories_count,
-					  header.directory_entry_format_count, debug_line_reader,
+	read_lnct_entries(header->directories, header->directory_entry_format,
+					  header->directories_count,
+					  header->directory_entry_format_count, debug_line_reader,
 					  &sections->debug_line_str);
 
 	/* TODO: Put these reads and allocations in read_lnct_entries too? */
-	read_bytes(debug_line_reader, &header.file_name_entry_format_count,
-			   sizeof(header.file_name_entry_format_count));
+	read_bytes(debug_line_reader, &header->file_name_entry_format_count,
+			   sizeof(header->file_name_entry_format_count));
 
-	header.file_name_entry_format = calloc(header.file_name_entry_format_count,
-										   sizeof(DwarfLineNumFormatDesc));
-	if (header.file_name_entry_format == NULL) {
+	header->file_name_entry_format = calloc(
+		header->file_name_entry_format_count, sizeof(DwarfLineNumFormatDesc));
+	if (header->file_name_entry_format == NULL) {
 		/* TODO: Handle failure */
 	}
 
-	for (uint8_t i = 0; i < header.file_name_entry_format_count; i++) {
+	for (uint8_t i = 0; i < header->file_name_entry_format_count; i++) {
 		uint64_t content_type_tmp, form_code_tmp;
 
 		read_uleb128(debug_line_reader, &content_type_tmp);
-		header.file_name_entry_format[i].content_type =
+		header->file_name_entry_format[i].content_type =
 			(DwarfLineNumContentType)content_type_tmp;
 
 		read_uleb128(debug_line_reader, &form_code_tmp);
-		header.file_name_entry_format[i].form_code =
+		header->file_name_entry_format[i].form_code =
 			(DwarfFormCode)form_code_tmp;
 	}
 
-	read_uleb128(debug_line_reader, &header.file_names_count);
+	read_uleb128(debug_line_reader, &header->file_names_count);
 
-	header.file_names =
-		calloc(header.file_names_count, sizeof(DwarfLineNumContentEntry));
+	header->file_names =
+		calloc(header->file_names_count, sizeof(DwarfLineNumContentEntry));
 
-	if (header.file_names == NULL) {
+	if (header->file_names == NULL) {
 		/* TODO: Handle error */
 	}
 
-	read_lnct_entries(header.file_names, header.file_name_entry_format,
-					  header.file_names_count,
-					  header.file_name_entry_format_count, debug_line_reader,
+	read_lnct_entries(header->file_names, header->file_name_entry_format,
+					  header->file_names_count,
+					  header->file_name_entry_format_count, debug_line_reader,
 					  &sections->debug_line_str);
 
 	return header;
@@ -327,11 +328,12 @@ alloc_line_header64(ProgramSections *sections,
 static void free_line_header64(LineNumProgHeader64 *header) {
 	free(header->directory_entry_format);
 	/*free(header->file_name_entry_format);*/
+	/* TODO */
 }
 
 /* Successive insertions must be monotonically increasing in the
  * operation pointer (i.e. address for non-VLIW architectures). */
-static void append_line_info_entry(LineInfoCompUnitTable *line_info_table,
+static void append_line_info_entry(LineInfoTable *line_info_table,
 								   LineNumStateMachine *state_machine) {
 	LineInfoSequence *sequence = NULL;
 
@@ -349,13 +351,13 @@ static void append_line_info_entry(LineInfoCompUnitTable *line_info_table,
 			&line_info_table->sequences[line_info_table->sequences_count - 1];
 		sequence->entry_count = 0;
 		sequence->entries = NULL;
-		printf("(new seq) ");
+		/*printf("(new seq) ");*/
 	} else {
 		/* The commented invariant above means we don't have to search for the
 		 * containing sequence. We know that it must be the last. */
 		sequence =
 			&line_info_table->sequences[line_info_table->sequences_count - 1];
-		printf("(same seq) ");
+		/*printf("(same seq) ");*/
 	}
 
 	sequence->entry_count += 1;
@@ -379,6 +381,7 @@ static void append_line_info_entry(LineInfoCompUnitTable *line_info_table,
 	entry->prologue_end = state_machine->prologue_end;
 	entry->epilogue_begin = state_machine->epilogue_begin;
 
+	/*
 	printf("addr: 0x%zx, f: %u, line: %u, col: %u, "
 		   "disc: %u, block: %b, stmt: %b, endseq: %b, "
 		   "prologend: %b, epibegin: %b\n",
@@ -387,12 +390,12 @@ static void append_line_info_entry(LineInfoCompUnitTable *line_info_table,
 		   state_machine->basic_block, state_machine->is_stmt,
 		   state_machine->end_sequence, state_machine->prologue_end,
 		   state_machine->epilogue_begin);
+	*/
 }
 
 /* See DWARF 5 Specification Table 6.4 for initial values */
-static inline void
-reset_line_num_state_machine(LineNumStateMachine *state_machine,
-							 bool default_is_stmt) {
+static void reset_line_num_state_machine(LineNumStateMachine *state_machine,
+										 bool default_is_stmt) {
 	state_machine->address = 0;
 	state_machine->op_index = 0;
 	state_machine->file = 1;
@@ -407,9 +410,9 @@ reset_line_num_state_machine(LineNumStateMachine *state_machine,
 	state_machine->discriminator = 0;
 }
 
-static inline void state_machine_advance_pc(LineNumStateMachine *state_machine,
-											LineNumProgHeader64 *header,
-											uint64_t op_advance) {
+static void state_machine_advance_pc(LineNumStateMachine *state_machine,
+									 LineNumProgHeader64 *header,
+									 uint64_t op_advance) {
 	state_machine->address += header->minimum_instruction_length *
 							  ((state_machine->op_index + op_advance) /
 							   header->maximum_operations_per_instruction);
@@ -417,10 +420,9 @@ static inline void state_machine_advance_pc(LineNumStateMachine *state_machine,
 							  header->maximum_operations_per_instruction;
 }
 
-static LineInfoCompUnitTable
-decode_line_num_prog(LineNumProgHeader64 *header,
-					 BinaryReader *debug_line_reader) {
-	LineInfoCompUnitTable line_info_table = {0};
+static LineInfoTable decode_line_num_prog(LineNumProgHeader64 *header,
+										  BinaryReader *debug_line_reader) {
+	LineInfoTable line_info_table = {0};
 
 	LineNumStateMachine state_machine;
 	reset_line_num_state_machine(&state_machine, header->default_is_stmt);
@@ -570,17 +572,39 @@ decode_line_num_prog(LineNumProgHeader64 *header,
 	return line_info_table;
 }
 
-LineInfo parse_debug_line_section(ProgramSections sections) {
+LineInfo *parse_debug_line_section(ProgramSections sections) {
 	BinaryReader debug_line_reader = {
 		.cursor = sections.debug_line.data,
 		.remaining = sections.debug_line.size,
 	};
 
-	LineNumProgHeader64 header =
-		alloc_line_header64(&sections, &debug_line_reader);
+	LineInfo *line_info = malloc(sizeof(LineInfo));
+	line_info->comp_unit_count = 0;
+	line_info->comp_units = NULL;
 
-	LineInfoCompUnitTable line_info_table =
-		decode_line_num_prog(&header, &debug_line_reader);
+	while (debug_line_reader.remaining > 0) {
+		LineNumProgHeader64 *header =
+			parse_line_header64(&sections, &debug_line_reader);
 
-	free_line_header64(&header);
+		line_info->comp_unit_count++;
+
+		line_info->comp_units =
+			reallocarray(line_info->comp_units, line_info->comp_unit_count,
+						 sizeof(LineInfoCompUnit));
+
+		LineInfoCompUnit *comp_unit =
+			&line_info->comp_units[line_info->comp_unit_count - 1];
+		comp_unit->header = header;
+		comp_unit->table = malloc(sizeof(LineInfoTable));
+
+		if (comp_unit->table == NULL) {
+			/* TODO */
+		}
+
+		*comp_unit->table = decode_line_num_prog(header, &debug_line_reader);
+
+		// free_line_header64(&header);
+	}
+
+	return line_info;
 }

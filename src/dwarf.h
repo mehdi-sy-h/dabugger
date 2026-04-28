@@ -7,52 +7,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct {
-	size_t address;
-	uint64_t op_index;
-	uint32_t file;
-	uint32_t line;
-	uint32_t column;
-	uint32_t discriminator;
-	uint16_t isa;
-	bool is_stmt;
-	bool basic_block;
-	bool end_sequence;
-	bool prologue_end;
-	bool epilogue_begin;
-} LineNumStateMachine;
-
-typedef struct {
-	size_t address;
-	uint64_t op_index;
-	uint32_t file;
-	uint32_t line;
-	uint32_t column;
-	uint32_t discriminator;
-	bool end_sequence;
-	bool is_stmt;
-	bool basic_block;
-	bool prologue_end;
-	bool epilogue_begin;
-} LineInfoEntry;
-
-typedef struct {
-	size_t entry_count;
-	LineInfoEntry *entries;
-} LineInfoSequence;
-
-/* The line number information for a particular compilation unit referenced
- * in the inferior executable's `.debug_line` section. */
-typedef struct {
-	size_t sequences_count;
-	LineInfoSequence *sequences;
-} LineInfoCompUnitTable;
-
-typedef struct {
-	size_t comp_unit_count;
-	LineInfoCompUnitTable *comp_unit_tables;
-} LineInfo;
-
 typedef uint8_t InitialLength32; /* Must be less than 0xfffffff0 */
 
 typedef struct __attribute__((packed)) {
@@ -168,6 +122,57 @@ typedef enum {
 	DW_LNE_hi_user = 0xff,
 } DwarfLineExtendedOpcode;
 
-LineInfo parse_debug_line_section(ProgramSections sections);
+typedef struct {
+	size_t address;
+	uint64_t op_index;
+	uint32_t file;
+	uint32_t line;
+	uint32_t column;
+	uint32_t discriminator;
+	uint16_t isa;
+	bool is_stmt;
+	bool basic_block;
+	bool end_sequence;
+	bool prologue_end;
+	bool epilogue_begin;
+} LineNumStateMachine;
+
+typedef struct {
+	size_t address;
+	uint64_t op_index;
+	uint32_t file;
+	uint32_t line;
+	uint32_t column;
+	uint32_t discriminator;
+	bool end_sequence;
+	bool is_stmt;
+	bool basic_block;
+	bool prologue_end;
+	bool epilogue_begin;
+} LineInfoEntry;
+
+typedef struct {
+	size_t entry_count;
+	LineInfoEntry *entries;
+} LineInfoSequence;
+
+/* The line number information for a particular compilation unit referenced
+ * in the inferior executable's `.debug_line` section. */
+typedef struct {
+	size_t sequences_count;
+	LineInfoSequence *sequences;
+} LineInfoTable;
+
+typedef struct {
+	LineNumProgHeader64 *header;
+	LineInfoTable *table;
+} LineInfoCompUnit;
+
+typedef struct {
+	size_t comp_unit_count;
+	LineInfoCompUnit *comp_units;
+} LineInfo;
+
+LineInfo *parse_debug_line_section(ProgramSections sections);
 
 #endif /* DABUGGER_DWARF_H */
