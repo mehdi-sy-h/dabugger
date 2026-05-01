@@ -13,17 +13,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-size_t get_common_prefix_dir_len(const char **paths, size_t count) {
-	if (count <= 1)
-		return 0;
-	const char *a = paths[0];
-	const char *b = paths[count - 1];
-	size_t i = 0;
-	while (a[i] != '\0' && a[i] == b[i])
-		i++;
-	return i;
-}
-
 int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 	if (argc < 2) {
 		/* TODO: Attach mode
@@ -53,6 +42,7 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 			calloc(line_info->comp_unit_count, sizeof(char *));
 
 		printf("Parsed %zu compilation units:\n", line_info->comp_unit_count);
+
 		for (size_t i = 0; i < line_info->comp_unit_count; i++) {
 			const LineInfoCompUnit *comp_unit = &line_info->comp_units[i];
 			const char *file_name = comp_unit->header->file_names[0].path;
@@ -60,11 +50,18 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 			printf("%s\n", file_name);
 		}
 
-		size_t prefix_len = get_common_prefix_dir_len(
-			picker_options, line_info->comp_unit_count);
+		if (line_info->comp_unit_count > 1) {
+			size_t common_prefix_len = 0;
+			const char *a = picker_options[0];
+			const char *b = picker_options[1];
 
-		for (size_t i = 0; i < line_info->comp_unit_count; i++) {
-			picker_options[i] += prefix_len;
+			while (a[common_prefix_len] != '\0' &&
+				   a[common_prefix_len] == b[common_prefix_len])
+				common_prefix_len++;
+
+			for (size_t i = 0; i < line_info->comp_unit_count; i++) {
+				picker_options[i] += common_prefix_len;
+			}
 		}
 
 		set_picker_options(picker_options, line_info->comp_unit_count);
