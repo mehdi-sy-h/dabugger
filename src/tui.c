@@ -27,6 +27,8 @@
 #define KEY_MOTION_DOWN 'j'
 #define KEY_MOTION_LEFT 'h'
 #define KEY_MOTION_RIGHT 'l'
+#define KEY_MOTION_PAGE_UP KEY_PPAGE
+#define KEY_MOTION_PAGE_DOWN KEY_NPAGE
 #define KEY_CHORD_HALF_UP CTRL('u')
 #define KEY_CHORD_HALF_DOWN CTRL('d')
 #define KEY_CHORD_SWITCH_WIN CTRL('w')
@@ -57,16 +59,23 @@ typedef struct {
 	WINDOW *asm_win;
 	WINDOW *output_win;
 	WINDOW *regs_win;
+	WINDOW *picker_win;
 
 	PANEL *src_pan;
 	PANEL *asm_pan;
 	PANEL *output_pan;
 	PANEL *regs_pan;
+	PANEL *picker_pan;
+
+	const char **picker_options;
+	size_t picker_option_count;
 
 	Win focused;
 
 	unsigned rows;
 	unsigned cols;
+
+	bool is_picker_visible;
 } TuiState;
 
 typedef struct {
@@ -105,22 +114,26 @@ static void set_win_border(WINDOW *win, attr_t attr, short color_pair) {
 	wborder_set(win, &ls, &rs, &ts, &bs, &tl, &tr, &bl, &br);
 }
 
-static void init_sections() {
+static void init_windows() {
 	tui.src_win = newwin(2 * tui.rows / 3, tui.cols / 2, 0, 0);
 	tui.asm_win = newwin(2 * tui.rows / 3, tui.cols / 2, 0, tui.cols / 2);
 	tui.output_win = newwin(tui.rows / 3, tui.cols / 2, 2 * tui.rows / 3, 0);
 	tui.regs_win =
 		newwin(tui.rows / 3, tui.cols / 2, 2 * tui.rows / 3, tui.cols / 2);
+	tui.picker_win =
+		newwin(tui.rows / 2, tui.cols / 2, tui.rows / 4, tui.cols / 4);
 
 	tui.src_pan = new_panel(tui.src_win);
 	tui.asm_pan = new_panel(tui.asm_win);
 	tui.output_pan = new_panel(tui.output_win);
 	tui.regs_pan = new_panel(tui.regs_win);
+	tui.picker_pan = new_panel(tui.picker_win);
 
 	set_win_border(tui.src_win, A_NORMAL, 0);
 	set_win_border(tui.asm_win, A_NORMAL, 0);
 	set_win_border(tui.output_win, A_NORMAL, 0);
 	set_win_border(tui.regs_win, A_NORMAL, 0);
+	set_win_border(tui.picker_win, A_NORMAL, 0);
 
 	wattron(tui.src_win, A_BOLD);
 	mvwprintw(tui.src_win, 1, 2, "Source");
@@ -138,15 +151,23 @@ static void init_sections() {
 	mvwprintw(tui.regs_win, 1, 2, "Registers");
 	wattroff(tui.regs_win, A_BOLD);
 
+	wattron(tui.picker_win, A_BOLD);
+	mvwprintw(tui.picker_win, 1, 2, "Picker");
+	wattroff(tui.picker_win, A_BOLD);
+
 	intrflush(tui.src_win, FALSE);
 	intrflush(tui.asm_win, FALSE);
 	intrflush(tui.output_win, FALSE);
 	intrflush(tui.regs_win, FALSE);
+	intrflush(tui.picker_win, FALSE);
 
 	keypad(tui.src_win, TRUE);
 	keypad(tui.asm_win, TRUE);
 	keypad(tui.output_win, TRUE);
 	keypad(tui.regs_win, TRUE);
+	keypad(tui.picker_win, TRUE);
+
+	hide_panel(tui.picker_pan);
 
 	update_panels();
 	doupdate();
@@ -239,6 +260,11 @@ static void on_motion_input() {
 	clear_input_buffer();
 }
 
+void set_picker_options(const char **options, size_t count) {
+	tui.picker_options = options;
+	tui.picker_option_count = count;
+}
+
 int open_tui() {
 	setlocale(LC_ALL, "");
 
@@ -257,7 +283,7 @@ int open_tui() {
 	refresh();
 
 	init_colors();
-	init_sections();
+	init_windows();
 
 	focus_win(WIN_SRC);
 
@@ -277,6 +303,18 @@ int open_tui() {
 		case KEY_QUIT:
 			quit = true;
 			break;
+		case KEY_CHORD_FILE_PICKER:
+			tui.is_picker_visible = !tui.is_picker_visible;
+			if (tui.is_picker_visible) {
+				for (size_t i = 0; i < tui.picker_option_count; i++) {
+					mvwprintw(tui.picker_win, (int)i + 3, 2, "%s",
+							  tui.picker_options[i]);
+				}
+				show_panel(tui.picker_pan);
+			} else {
+				hide_panel(tui.picker_pan);
+			}
+			break;
 		case KEY_MOTION_UP:
 		case KEY_MOTION_DOWN:
 		case KEY_MOTION_LEFT:
@@ -286,6 +324,9 @@ int open_tui() {
 		default:
 			break;
 		}
+
+		update_panels();
+		doupdate();
 	}
 
 	return 0;
