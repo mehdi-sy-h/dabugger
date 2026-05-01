@@ -21,7 +21,7 @@ cmake --build build
 If you want to build the debugger with debug symbols, do the above but swap the first command for `cmake -B build -DCMAKE_BUILD_TYPE=Debug`.
 
 ## Usage
-**NOTE:** This is a personal toy project, I do not recommend using this in production and certainly not for debugging suspicious executables. If you want to debug a production application, please use GDB or LLDB instead, or the many frontends available for those. Obviously you shouldn't execute suspicious executables at all.
+**NOTE:** This is a personal toy project, I do not recommend using this for anything serious.
 
 If you are using `gcc` or `clang`, compile the program you want to debug with the additional flags `-gdwarf-5 -g3 -Og`.
 Then run `dabugger path-to-your-executable`.
