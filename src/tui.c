@@ -1,5 +1,7 @@
 #include <assert.h>
 #include <locale.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 /* TODO: Non widechar support (conditional macros) */
 #define NCURSES_WIDECHAR 1
@@ -33,6 +35,7 @@
 #define KEY_CHORD_HALF_DOWN CTRL('d')
 #define KEY_CHORD_SWITCH_WIN CTRL('w')
 #define KEY_CHORD_FILE_PICKER CTRL('p')
+#define KEY_CONFIRM '\n'
 #define KEY_SET_BREAKPOINT ' '
 #define KEY_EXECUTE_PROG 'R'
 
@@ -69,6 +72,8 @@ typedef struct {
 
 	const char **picker_options;
 	size_t picker_option_count;
+	size_t selected_picker_option;
+	void (*on_selected)(const char **, size_t);
 
 	Win focused;
 
@@ -112,6 +117,11 @@ static void set_win_border(WINDOW *win, attr_t attr, short color_pair) {
 	setcchar(&br, L"\u256F", attr, color_pair, NULL); /* ╯ */
 
 	wborder_set(win, &ls, &rs, &ts, &bs, &tl, &tr, &bl, &br);
+}
+
+static void reset_window(Win win) {
+	/* TODO: Implement this and use this instead of current method of clearing
+	 * src window etc */
 }
 
 static void init_windows() {
@@ -232,9 +242,49 @@ static void clear_input_buffer() {
 	memset(input.buffer, 0, sizeof(input.buffer));
 }
 
+static void update_picker_menu() {
+	size_t common_prefix_len = 0;
+
+	if (tui.picker_option_count > 1) {
+		const char *a = tui.picker_options[0];
+		const char *b = tui.picker_options[1];
+
+		while (a[common_prefix_len] != '\0' &&
+			   a[common_prefix_len] == b[common_prefix_len])
+			common_prefix_len++;
+	}
+
+	for (size_t i = 0; i < tui.picker_option_count; i++) {
+		if (i == tui.selected_picker_option) {
+			wattron(tui.picker_win, A_STANDOUT | A_BOLD | A_UNDERLINE |
+										COLOR_PAIR(ACTIVE_COLOR));
+			mvwprintw(tui.picker_win, (int)i + 3, 2, "%s",
+					  tui.picker_options[i] + common_prefix_len);
+			wattroff(tui.picker_win, A_STANDOUT | A_BOLD | A_UNDERLINE |
+										 COLOR_PAIR(ACTIVE_COLOR));
+		} else {
+			mvwprintw(tui.picker_win, (int)i + 3, 2, "%s",
+					  tui.picker_options[i] + common_prefix_len);
+		}
+	}
+}
+
 static void on_motion_input() {
 	assert(input.key == KEY_MOTION_DOWN || input.key == KEY_MOTION_LEFT ||
 		   input.key == KEY_MOTION_RIGHT || input.key == KEY_MOTION_UP);
+
+	if (tui.is_picker_visible) {
+		if (input.key == KEY_MOTION_UP) {
+			tui.selected_picker_option =
+				(tui.selected_picker_option - 1 + tui.picker_option_count) %
+				tui.picker_option_count;
+		} else if (input.key == KEY_MOTION_DOWN) {
+			tui.selected_picker_option =
+				(tui.selected_picker_option + 1) % tui.picker_option_count;
+		}
+		update_picker_menu();
+		return;
+	}
 
 	if (input.count == 1) {
 	} else if (input.buffer[input.count - 2] == KEY_CHORD_SWITCH_WIN) {
@@ -265,12 +315,18 @@ void set_picker_options(const char **options, size_t count) {
 	tui.picker_option_count = count;
 }
 
+void set_picker_selected_callback(void (*on_selected)(const char **, size_t)) {
+	tui.on_selected = on_selected;
+}
+
 int open_tui() {
 	setlocale(LC_ALL, "");
 
 	initscr();
 	cbreak();
 	noecho();
+
+	curs_set(0);
 
 	intrflush(stdscr, FALSE);
 	keypad(stdscr, TRUE);
@@ -306,13 +362,52 @@ int open_tui() {
 		case KEY_CHORD_FILE_PICKER:
 			tui.is_picker_visible = !tui.is_picker_visible;
 			if (tui.is_picker_visible) {
-				for (size_t i = 0; i < tui.picker_option_count; i++) {
-					mvwprintw(tui.picker_win, (int)i + 3, 2, "%s",
-							  tui.picker_options[i]);
-				}
+				update_picker_menu();
 				show_panel(tui.picker_pan);
 			} else {
 				hide_panel(tui.picker_pan);
+			}
+			break;
+		case KEY_CONFIRM:
+			if (tui.is_picker_visible) {
+				tui.is_picker_visible = false;
+				hide_panel(tui.picker_pan);
+
+				FILE *file =
+					fopen(tui.picker_options[tui.selected_picker_option], "r");
+
+				unsigned src_rows, src_cols;
+				getmaxyx(tui.src_win, src_rows, src_cols);
+				/* TODO: Ensure that this code path is not executed, or that it
+				 * is handled properly, if the screen is too small. */
+				char *line = calloc(1, src_cols);
+				unsigned row = 2;
+
+				for (unsigned i = row; i < src_rows - 1; i++) {
+					for (unsigned j = 1; j < src_cols - 1; j++)
+						mvwaddch(tui.src_win, i, j, ' ');
+				}
+
+				src_cols -= 3;
+				src_rows -= 1;
+
+				while (row < src_rows && fgets(line, (int)src_cols, file)) {
+					line[strcspn(line, "\n")] = '\0';
+
+					/* TODO: Use 4 spaces for tabs, will require using fgets
+					 * differently */
+					for (unsigned i = 0; i < src_cols; i++) {
+						if (line[i] == '\t')
+							line[i] = ' ';
+					}
+
+					mvwprintw(tui.src_win, (int)row++, 2, "%s", line);
+					memset(line, 0, src_cols);
+				}
+				fclose(file);
+				/*
+				tui.on_selected(tui.picker_options, tui.selected_picker_option);
+				*/
 			}
 			break;
 		case KEY_MOTION_UP:

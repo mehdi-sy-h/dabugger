@@ -2,6 +2,7 @@
 #include "elf.h"
 #include "tui.h"
 
+#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,22 +47,18 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 		for (size_t i = 0; i < line_info->comp_unit_count; i++) {
 			const LineInfoCompUnit *comp_unit = &line_info->comp_units[i];
 			const char *file_name = comp_unit->header->file_names[0].path;
+			const char *directory = comp_unit->header->directories[0].path;
 			picker_options[i] = file_name;
+			printf("%s\n", directory);
 			printf("%s\n", file_name);
-		}
-
-		if (line_info->comp_unit_count > 1) {
-			size_t common_prefix_len = 0;
-			const char *a = picker_options[0];
-			const char *b = picker_options[1];
-
-			while (a[common_prefix_len] != '\0' &&
-				   a[common_prefix_len] == b[common_prefix_len])
-				common_prefix_len++;
-
-			for (size_t i = 0; i < line_info->comp_unit_count; i++) {
-				picker_options[i] += common_prefix_len;
-			}
+			/*
+			char *full_path =
+				calloc(1, strlen(directory) + strlen(file_name) + 2);
+			strcpy(full_path, directory);
+			full_path[strlen(directory)] = '/';
+			strcat(full_path, file_name);
+			picker_options[i] = full_path;
+			*/
 		}
 
 		set_picker_options(picker_options, line_info->comp_unit_count);
