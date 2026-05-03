@@ -38,6 +38,7 @@ static void read_lnct_path(BinaryReader *debug_line_reader,
 			path = (const char *)(debug_line_str_buffer->data) + offset;
 		} else if (form_code == DW_FORM_strp) {
 			/* TODO: Read from .debug_str */
+			assert(0);
 		} else if (form_code == DW_FORM_strp_sup) {
 			/* Supplementary string section (in split object file), probably
 			 * wont handle. */
@@ -103,7 +104,6 @@ static void read_lnct_timestamp(BinaryReader *reader, DwarfFormCode form_code,
 	} else if (form_code == DW_FORM_data8) {
 		result = read_bytes(reader, &timestamp, 8);
 	} else if (form_code == DW_FORM_block) {
-		/* TODO: Read ULEB128 length n followed by n bytes */
 		size_t bytes_count = 0;
 		result = read_uleb128(reader, &bytes_count);
 		/* TODO: Handle error */
@@ -203,6 +203,7 @@ static void read_lnct_entries(DwarfLineNumContentEntry *entries,
 					fmt.content_type <= DW_LNCT_hi_user) {
 					/* TODO: Need to advance reader according to the present
 					 * form codes */
+					assert(0);
 				}
 				/* TODO: Handle invalid case */;
 			}
