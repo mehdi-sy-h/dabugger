@@ -31,6 +31,7 @@ add_executable(${PROJECT_NAME}
 target_compile_options(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Debug>:-g3 -Og>
 	$<$<CONFIG:Release>:-O2 -DNDEBUG>
+	$<$<C_COMPILER_ID:GNU>:-gno-as-loc-support>
 )
 
 # TODO: Allow non-wide or curses support (will require guards in tui.h)
