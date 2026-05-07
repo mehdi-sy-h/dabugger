@@ -9,6 +9,19 @@
 #include <ncursesw/panel.h>
 #include <unistd.h>
 
+/* TODO: Future architecture update
+ * I think this project would be a great place to implement The Elm Architecture
+ * - Put state in a single Model struct (extend and modify the current TuiState)
+ * - Input -> Msg (tagged union) -> update(Model, Msg) -> Model
+ * - render(Model) repaints virtual screen from scratch each input loop tick
+ * - Use ncurses wnoutrefresh, doupdate, etc
+ * - Do not use wclear/werase before redrawing, overwrite in place instead
+ * - Keep update() pure (no ncurses calls or I/O). Side effects belong in
+ *   render() or in the event loop after update returns
+ * - dabugger.c stays decoupled by supplying the initial Model, and perhaps
+ *   subscriptions?
+ */
+
 /* TODO:
  * - Vim motions for navigation ([n](h|j|k|l), [n]G, gg, C-D, C-U, for win nav:
  * C-(h|j|k|l))
@@ -373,6 +386,8 @@ int open_tui() {
 				tui.is_picker_visible = false;
 				hide_panel(tui.picker_pan);
 
+				/* TODO: Separate UI code and logic (put some of the stuff here
+				 * in a callback instead) */
 				FILE *file =
 					fopen(tui.picker_options[tui.selected_picker_option], "r");
 
