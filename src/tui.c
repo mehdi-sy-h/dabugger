@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <ctype.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -43,8 +44,8 @@
 #define KEY_MOTION_DOWN 'j'
 #define KEY_MOTION_LEFT 'h'
 #define KEY_MOTION_RIGHT 'l'
-#define KEY_MOTION_LINE_SELECTOR 'g'
-#define KEY_MOTION_END_OF_FILE 'G'
+#define KEY_MOTION_START_OF_FILE 'g'
+#define KEY_MOTION_LINE_SELECTOR 'G'
 #define KEY_MOTION_PAGE_UP KEY_PPAGE
 #define KEY_MOTION_PAGE_DOWN KEY_NPAGE
 #define KEY_CHORD_HALF_UP CTRL('u')
@@ -342,7 +343,8 @@ static void on_motion_input() {
 	assert(input.key == KEY_MOTION_DOWN || input.key == KEY_MOTION_LEFT ||
 		   input.key == KEY_MOTION_RIGHT || input.key == KEY_MOTION_UP ||
 		   input.key == KEY_CHORD_HALF_UP || input.key == KEY_CHORD_HALF_DOWN ||
-		   input.key == KEY_MOTION_END_OF_FILE);
+		   input.key == KEY_MOTION_LINE_SELECTOR ||
+		   input.key == KEY_MOTION_START_OF_FILE);
 
 	if (tui.is_picker_visible) {
 		if (input.key == KEY_MOTION_UP) {
@@ -413,8 +415,27 @@ static void on_motion_input() {
 
 		if (selected_line) {
 			/* TODO: Do this properly so it cant't overflow */
-			if (input.key == KEY_MOTION_END_OF_FILE) {
-				*selected_line = lines_count - 1;
+			if (input.key == KEY_MOTION_LINE_SELECTOR) {
+				char *num_start = NULL;
+				for (int i = input.count - 2; i >= 0; i--) {
+					if (isdigit(input.buffer[i]))
+						num_start = input.buffer + i;
+				}
+				if (num_start == NULL) {
+					*selected_line = lines_count - 1;
+				} else {
+					long line_num = strtol(num_start, NULL, 10);
+					*selected_line =
+						MIN((size_t)line_num - 1, tui.src_lines_count - 1);
+				}
+			} else if (input.key == KEY_MOTION_START_OF_FILE) {
+				if (input.count > 1 &&
+					input.buffer[input.count - 2] == input.key) {
+					*selected_line = 0;
+				} else if (input.count == 1 ||
+						   input.buffer[input.count - 2] != input.key) {
+					return;
+				}
 			} else if (is_move_down) {
 				*selected_line =
 					MIN(lines_count - 1, *selected_line + line_distance);
@@ -591,7 +612,8 @@ int open_tui() {
 		case KEY_MOTION_PAGE_UP:
 		case KEY_MOTION_PAGE_DOWN:
 		*/
-		case KEY_MOTION_END_OF_FILE:
+		case KEY_MOTION_START_OF_FILE:
+		case KEY_MOTION_LINE_SELECTOR:
 		case KEY_CHORD_HALF_UP:
 		case KEY_CHORD_HALF_DOWN:
 			on_motion_input();
