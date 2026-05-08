@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <locale.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,8 @@
 #define KEY_MOTION_DOWN 'j'
 #define KEY_MOTION_LEFT 'h'
 #define KEY_MOTION_RIGHT 'l'
+#define KEY_MOTION_LINE_SELECTOR 'g'
+#define KEY_MOTION_END_OF_FILE 'G'
 #define KEY_MOTION_PAGE_UP KEY_PPAGE
 #define KEY_MOTION_PAGE_DOWN KEY_NPAGE
 #define KEY_CHORD_HALF_UP CTRL('u')
@@ -87,6 +90,20 @@ typedef struct {
 	size_t picker_option_count;
 	size_t selected_picker_option;
 	void (*on_selected)(const char **, size_t);
+
+	const size_t *src_breakpoints;
+	char **src_lines;
+	size_t src_lines_count;
+	size_t selected_src_line;
+	size_t src_buffer_pos;
+
+	const size_t *asm_breakpoints;
+	char **asm_lines;
+	size_t asm_lines_count;
+	size_t selected_asm_line;
+	size_t asm_buffer_pos;
+
+	/*uint8_t selected_reg;*/
 
 	Win focused;
 
@@ -282,9 +299,50 @@ static void update_picker_menu() {
 	}
 }
 
+static void update_src_win() {
+	unsigned src_rows, src_cols;
+	getmaxyx(tui.src_win, src_rows, src_cols);
+
+	/* TODO: Too many magic numbers, deal with this */
+	unsigned max_lines = src_rows - 3;
+	unsigned max_line_length = src_cols - 8;
+
+	for (unsigned i = 2; i < src_rows - 1; i++) {
+		for (unsigned j = 1; j < src_cols - 1; j++)
+			mvwaddch(tui.src_win, i, j, ' ');
+	}
+
+	for (unsigned i = 0; i < max_lines; i++) {
+		const unsigned line_num = (unsigned)tui.src_buffer_pos + i;
+
+		if (line_num >= tui.src_lines_count)
+			break;
+		char *line = tui.src_lines[line_num];
+
+		/* TODO: Line wrapping instead of truncation */
+		if (line_num == tui.selected_src_line) {
+			wattron(tui.src_win,
+					A_STANDOUT | A_BOLD | COLOR_PAIR(ACTIVE_COLOR));
+			mvwprintw(tui.src_win, (int)i + 2, 1, "%4d", line_num + 1);
+			waddwstr(tui.src_win, L"\u2502 ");
+			wprintw(tui.src_win, "%.*s", max_line_length, line);
+			wattroff(tui.src_win,
+					 A_STANDOUT | A_BOLD | COLOR_PAIR(ACTIVE_COLOR));
+		} else {
+			wattron(tui.src_win, A_BOLD);
+			mvwprintw(tui.src_win, (int)i + 2, 1, "%4d", line_num + 1);
+			waddwstr(tui.src_win, L"\u2502 ");
+			wattroff(tui.src_win, A_BOLD);
+			wprintw(tui.src_win, "%.*s", max_line_length, line);
+		}
+	}
+}
+
 static void on_motion_input() {
 	assert(input.key == KEY_MOTION_DOWN || input.key == KEY_MOTION_LEFT ||
-		   input.key == KEY_MOTION_RIGHT || input.key == KEY_MOTION_UP);
+		   input.key == KEY_MOTION_RIGHT || input.key == KEY_MOTION_UP ||
+		   input.key == KEY_CHORD_HALF_UP || input.key == KEY_CHORD_HALF_DOWN ||
+		   input.key == KEY_MOTION_END_OF_FILE);
 
 	if (tui.is_picker_visible) {
 		if (input.key == KEY_MOTION_UP) {
@@ -296,11 +354,8 @@ static void on_motion_input() {
 				(tui.selected_picker_option + 1) % tui.picker_option_count;
 		}
 		update_picker_menu();
-		return;
-	}
-
-	if (input.count == 1) {
-	} else if (input.buffer[input.count - 2] == KEY_CHORD_SWITCH_WIN) {
+	} else if (input.count > 1 &&
+			   input.buffer[input.count - 2] == KEY_CHORD_SWITCH_WIN) {
 		/* TODO: Fix chord delay */
 		/* TODO: Dont allow wrapping */
 		Win current_win = tui.focused;
@@ -318,6 +373,65 @@ static void on_motion_input() {
 		}
 		focus_win(new_win);
 	} else {
+		unsigned line_distance = 0;
+		bool is_move_down = true;
+
+		/* We assume that src and asm have the same dimensions */
+		unsigned src_rows = (unsigned)getmaxy(tui.src_win);
+
+		switch (input.key) {
+		case KEY_MOTION_UP:
+			is_move_down = false;
+		case KEY_MOTION_DOWN:
+			line_distance = 1;
+			break;
+		case KEY_CHORD_HALF_UP:
+			is_move_down = false;
+		case KEY_CHORD_HALF_DOWN:
+			line_distance = src_rows / 2;
+			break;
+		}
+
+		WINDOW *win = NULL;
+		size_t *selected_line = NULL;
+		size_t *buffer_pos = NULL;
+		size_t lines_count = 0;
+
+		unsigned max_lines = src_rows - 3;
+
+		if (tui.focused == WIN_SRC) {
+			win = tui.src_win;
+			selected_line = &tui.selected_src_line;
+			buffer_pos = &tui.src_buffer_pos;
+			lines_count = tui.src_lines_count;
+		} else if (tui.focused == WIN_ASM) {
+			win = tui.asm_win;
+			selected_line = &tui.selected_asm_line;
+			buffer_pos = &tui.asm_buffer_pos;
+			lines_count = tui.asm_lines_count;
+		}
+
+		if (selected_line) {
+			/* TODO: Do this properly so it cant't overflow */
+			if (input.key == KEY_MOTION_END_OF_FILE) {
+				*selected_line = lines_count - 1;
+			} else if (is_move_down) {
+				*selected_line =
+					MIN(lines_count - 1, *selected_line + line_distance);
+			} else {
+				*selected_line = (size_t)MAX(0, (int64_t)*selected_line -
+													(int64_t)line_distance);
+			}
+
+			/* TODO: Center the buffer on C-d and C-u */
+			if (*selected_line < *buffer_pos) {
+				*buffer_pos = *selected_line;
+			} else if (*selected_line > *buffer_pos + max_lines - 1) {
+				*buffer_pos = *selected_line - max_lines + 1;
+			}
+
+			update_src_win();
+		}
 	}
 
 	clear_input_buffer();
@@ -386,8 +500,17 @@ int open_tui() {
 				tui.is_picker_visible = false;
 				hide_panel(tui.picker_pan);
 
-				/* TODO: Separate UI code and logic (put some of the stuff here
-				 * in a callback instead) */
+				/* TODO: Free relevant pointers */
+				tui.src_lines_count = 0;
+				tui.selected_src_line = 0;
+				tui.src_buffer_pos = 0;
+
+				tui.asm_lines_count = 0;
+				tui.selected_asm_line = 0;
+				tui.src_buffer_pos = 0;
+
+				/* TODO: Separate UI code and logic (put some of the stuff
+				 * here in a callback instead) */
 				FILE *file =
 					fopen(tui.picker_options[tui.selected_picker_option], "r");
 
@@ -395,40 +518,82 @@ int open_tui() {
 				getmaxyx(tui.src_win, src_rows, src_cols);
 				/* TODO: Ensure that this code path is not executed, or that it
 				 * is handled properly, if the screen is too small. */
-				char *line = calloc(1, src_cols);
+				/*char *line = calloc(1, src_cols);*/
 				unsigned row = 2;
 
+				/*
 				for (unsigned i = row; i < src_rows - 1; i++) {
 					for (unsigned j = 1; j < src_cols - 1; j++)
 						mvwaddch(tui.src_win, i, j, ' ');
 				}
+				*/
 
-				src_cols -= 3;
+				src_cols -= 7;
 				src_rows -= 1;
 
-				while (row < src_rows && fgets(line, (int)src_cols, file)) {
+				char *line = NULL;
+				size_t line_len = 0;
+
+				unsigned line_num = 0;
+				while ((getline(&line, &line_len, file)) > 0) {
 					line[strcspn(line, "\n")] = '\0';
 
-					/* TODO: Use 4 spaces for tabs, will require using fgets
-					 * differently */
+					/* TODO: Use 2 or 4 spaces for tabs, will need to put this
+					 * preprocessing in update_src_win */
 					for (unsigned i = 0; i < src_cols; i++) {
 						if (line[i] == '\t')
 							line[i] = ' ';
 					}
 
-					mvwprintw(tui.src_win, (int)row++, 2, "%s", line);
-					memset(line, 0, src_cols);
+					tui.src_lines = reallocarray(tui.src_lines, line_num + 1,
+												 sizeof(char *));
+					tui.src_lines[line_num] = calloc(1, line_len);
+					strcpy(tui.src_lines[line_num], line);
+					line_num++;
 				}
+				tui.src_lines_count = line_num;
+				update_src_win();
+
 				fclose(file);
+				// unsigned line_num = 0;
+				// while (/*row < src_rows &&*/ fgets(line, (int)src_cols,
+				// file)) { line[strcspn(line, "\n")] = '\0';
+
+				// /* TODO: Use 4 spaces for tabs, will require using fgets
+				// * differently */
+				// for (unsigned i = 0; i < src_cols; i++) {
+				// if (line[i] == '\t')
+				// line[i] = ' ';
+				// }
+
+				// tui.src_lines = reallocarray(tui.src_lines, line_num + 1,
+				// sizeof(char *));
+				// tui.src_lines[line_num] = calloc(1, src_cols);
+				// strcpy(tui.src_lines[line_num], line);
+				// memset(line, 0, src_cols);
+
+				// /*row += 1;*/
+				// line_num += 1;
+				// }
 				/*
 				tui.on_selected(tui.picker_options, tui.selected_picker_option);
 				*/
 			}
+			clear_input_buffer();
 			break;
 		case KEY_MOTION_UP:
 		case KEY_MOTION_DOWN:
 		case KEY_MOTION_LEFT:
 		case KEY_MOTION_RIGHT:
+		/* TODO: Set InputBuffer.key to correct type to support keypad
+		characters
+
+		case KEY_MOTION_PAGE_UP:
+		case KEY_MOTION_PAGE_DOWN:
+		*/
+		case KEY_MOTION_END_OF_FILE:
+		case KEY_CHORD_HALF_UP:
+		case KEY_CHORD_HALF_DOWN:
 			on_motion_input();
 			break;
 		default:
