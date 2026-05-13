@@ -156,13 +156,13 @@ typedef struct {
 	LineInfoEntry *entries;
 } LineInfoSequence;
 
-/* The line number information for a particular compilation unit referenced
- * in the inferior executable's `.debug_line` section. */
 typedef struct {
 	size_t sequences_count;
 	LineInfoSequence *sequences;
 } LineInfoTable;
 
+/* The line number information for a particular compilation unit referenced
+ * in the inferior executable's `.debug_line` section. */
 typedef struct {
 	LineNumProgHeader64 *header;
 	LineInfoTable *table;

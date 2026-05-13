@@ -17,7 +17,6 @@ add_compile_options(
 	-Wpedantic
 	-Wshadow
 	-Wconversion
-	-gdwarf64 # TODO: Remove once 32 bit DWARF is implemented
 )
 
 add_executable(${PROJECT_NAME}
@@ -26,12 +25,12 @@ add_executable(${PROJECT_NAME}
 	src/dwarf.c
 	src/reader.c
 	src/tui.c
+	src/debug.c
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Debug>:-g3 -Og>
 	$<$<CONFIG:Release>:-O2 -DNDEBUG>
-	$<$<C_COMPILER_ID:GNU>:-gno-as-loc-support>
 )
 
 # TODO: Allow non-wide or curses support (will require guards in tui.h)

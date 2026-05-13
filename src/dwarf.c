@@ -12,6 +12,9 @@
 
 /* TODO: Define and use this and pass it around static functions in dwarf.c */
 typedef struct {
+} DwarfLineCU;
+
+typedef struct {
 } DwarfLineContext;
 
 static void read_lnct_path(BinaryReader *debug_line_reader,
@@ -22,8 +25,6 @@ static void read_lnct_path(BinaryReader *debug_line_reader,
 	ReadResult result;
 
 	if (form_code == DW_FORM_string) {
-		/* TODO: Could be bad, malloc path and copy into that instead?
-		 * Or reimplement read_cstring to return a copy of the string. */
 		result = read_cstring(debug_line_reader, &path);
 	} else if (form_code == DW_FORM_line_strp || form_code == DW_FORM_strp ||
 			   form_code == DW_FORM_strp_sup) {
@@ -122,7 +123,7 @@ static void read_lnct_timestamp(BinaryReader *reader, DwarfFormCode form_code,
 }
 static void read_lnct_size(BinaryReader *reader, DwarfFormCode form_code,
 						   DwarfLineNumContentEntry *out_entry) {
-	/* Fix for big endian */
+	/* TODO: Fix for big endian */
 	uint64_t size;
 	ReadResult result;
 
@@ -171,7 +172,6 @@ static void read_lnct_entries(DwarfLineNumContentEntry *entries,
 							  uint64_t entry_count, uint8_t format_count,
 							  BinaryReader *debug_line_reader,
 							  SectionBuffer *debug_line_str) {
-	/*printf("\n------\n");*/
 	for (uint64_t i = 0; i < entry_count; i++) {
 		DwarfLineNumContentEntry entry = {0};
 		for (uint8_t j = 0; j < format_count; j++) {
@@ -243,8 +243,8 @@ parse_line_header64(ProgramSections *sections,
 			   sizeof(header->opcode_base));
 
 	header->standard_opcode_lengths =
-
 		calloc(header->opcode_base - 1, sizeof(uint8_t));
+
 	if (header->standard_opcode_lengths == NULL) {
 		/* TODO: Handle failure */
 	}
@@ -257,6 +257,7 @@ parse_line_header64(ProgramSections *sections,
 
 	header->directory_entry_format = calloc(
 		header->directory_entry_format_count, sizeof(DwarfLineNumFormatDesc));
+
 	if (header->directory_entry_format == NULL) {
 		/* TODO: Handle failure */
 	}
@@ -326,11 +327,12 @@ parse_line_header64(ProgramSections *sections,
 	return header;
 }
 
+/*
 static void free_line_header64(LineNumProgHeader64 *header) {
 	free(header->directory_entry_format);
-	/*free(header->file_name_entry_format);*/
-	/* TODO */
+	free(header->file_name_entry_format);
 }
+*/
 
 /* Successive insertions must be monotonically increasing in the
  * operation pointer (i.e. address for non-VLIW architectures). */
@@ -352,13 +354,11 @@ static void append_line_info_entry(LineInfoTable *line_info_table,
 			&line_info_table->sequences[line_info_table->sequences_count - 1];
 		sequence->entry_count = 0;
 		sequence->entries = NULL;
-		/*printf("(new seq) ");*/
 	} else {
 		/* The commented invariant above means we don't have to search for the
 		 * containing sequence. We know that it must be the last. */
 		sequence =
 			&line_info_table->sequences[line_info_table->sequences_count - 1];
-		/*printf("(same seq) ");*/
 	}
 
 	sequence->entry_count += 1;
@@ -381,17 +381,6 @@ static void append_line_info_entry(LineInfoTable *line_info_table,
 	entry->basic_block = state_machine->basic_block;
 	entry->prologue_end = state_machine->prologue_end;
 	entry->epilogue_begin = state_machine->epilogue_begin;
-
-	/*
-	printf("addr: 0x%zx, f: %u, line: %u, col: %u, "
-		   "disc: %u, block: %b, stmt: %b, endseq: %b, "
-		   "prologend: %b, epibegin: %b\n",
-		   state_machine->address, state_machine->file, state_machine->line,
-		   state_machine->column, state_machine->discriminator,
-		   state_machine->basic_block, state_machine->is_stmt,
-		   state_machine->end_sequence, state_machine->prologue_end,
-		   state_machine->epilogue_begin);
-	*/
 }
 
 /* See DWARF 5 Specification Table 6.4 for initial values */

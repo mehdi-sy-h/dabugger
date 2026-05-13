@@ -1,6 +1,7 @@
 #include "reader.h"
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 
 ReadResult advance_reader(BinaryReader *reader, size_t bytes) {
@@ -81,17 +82,25 @@ ReadResult read_sleb128(BinaryReader *reader, int64_t *out) {
 	return result;
 }
 
-/* TODO: Copy instead of returning pointer to string */
+/* The output string is heap allocated. The caller must ensure it is freed. */
 ReadResult read_cstring(BinaryReader *reader, const char **out) {
 	ReadResult result = {0};
+
 	void *end = memchr(reader->cursor, '\0', reader->remaining);
 	if (!end) {
 		result.status = READ_ERR_OUT_OF_BOUNDS;
 		return result;
 	}
-	*out = (const char *)reader->cursor;
-	result.bytes_consumed = (uint8_t *)end - reader->cursor + 1;
+
+	*out = strdup((const char *)reader->cursor);
+	if (*out == NULL) {
+		perror("error duplicating string");
+		exit(EXIT_FAILURE);
+	}
+
+	result.bytes_consumed = (size_t)((uint8_t *)end - reader->cursor + 1);
 	reader->cursor += result.bytes_consumed;
 	reader->remaining -= result.bytes_consumed;
+
 	return result;
 }
