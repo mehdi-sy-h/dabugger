@@ -33,4 +33,5 @@ Regardless, the DWARF specification recommends using the 32 bit DWARF format any
 
 ## Todo?
 - Parse other DWARF sections (`.debug_loc`, etc) to implement variable inspection.
-- Attach to process mode (requires handling position independent executables and ASLR)
+- Attach to process mode (requires handling position independent executables and ASLR).
+- Support multithreaded debuggees.
