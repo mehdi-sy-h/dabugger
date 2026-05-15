@@ -76,6 +76,7 @@ ProgramData parse_elf_file(const char *path) {
 	if (read_count != 1)
 		goto sys_error;
 
+	SectionBuffer text_section = {0};
 	SectionBuffer debug_line_section = {0};
 	SectionBuffer debug_str_section = {0};
 	SectionBuffer debug_line_str_section = {0};
@@ -94,6 +95,8 @@ ProgramData parse_elf_file(const char *path) {
 			current_section = &debug_str_section;
 		} else if (strcmp(section_name, ".debug_line_str") == 0) {
 			current_section = &debug_line_str_section;
+		} else if (strcmp(section_name, ".text")) {
+			current_section = &text_section;
 		} else {
 			continue;
 		}
@@ -116,7 +119,8 @@ ProgramData parse_elf_file(const char *path) {
 	free(section_header);
 	fclose(elf_file);
 
-	ProgramSections sections = {.debug_line = debug_line_section,
+	ProgramSections sections = {.text = text_section,
+								.debug_line = debug_line_section,
 								.debug_str = debug_str_section,
 								.debug_line_str = debug_line_str_section};
 

@@ -10,6 +10,7 @@ typedef struct {
 } SectionBuffer;
 
 typedef struct {
+	SectionBuffer text;
 	SectionBuffer debug_line;
 	SectionBuffer debug_str;
 	SectionBuffer debug_line_str;
