@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 typedef struct {
+	size_t address;
 	size_t size;
 	uint8_t *data;
 } SectionBuffer;

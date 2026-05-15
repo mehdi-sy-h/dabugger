@@ -95,12 +95,13 @@ ProgramData parse_elf_file(const char *path) {
 			current_section = &debug_str_section;
 		} else if (strcmp(section_name, ".debug_line_str") == 0) {
 			current_section = &debug_line_str_section;
-		} else if (strcmp(section_name, ".text")) {
+		} else if (strcmp(section_name, ".text") == 0) {
 			current_section = &text_section;
 		} else {
 			continue;
 		}
 
+		current_section->address = current_section_header.sh_addr;
 		current_section->size = current_section_header.sh_size;
 		current_section->data = malloc(current_section_header.sh_size);
 
