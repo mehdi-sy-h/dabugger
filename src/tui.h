@@ -29,13 +29,23 @@ typedef enum {
 	MSG_QUIT,
 	MSG_OPEN_PICKER,
 	MSG_CONFIRM,
-	MSG_MOTION,
+	MSG_BUFFER_MOTION,
+	MSG_GO_TO_BUFFER_LINE,
 	MSG_CHANGE_SECTION
 } TuiMsgType;
 
 typedef struct {
+	enum { DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT } direction;
+	union {
+		enum { BUFFER_HALF, BUFFER_FULL, BUFFER_START, BUFFER_END } relative;
+		unsigned long absolute;
+	} amount;
+} TuiMotion;
+
+typedef struct {
 	TuiMsgType type;
 	union {
+		TuiMotion motion;
 	} value;
 } TuiMsg;
 

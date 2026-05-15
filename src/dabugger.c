@@ -1,12 +1,78 @@
 #include "debug.h"
 #include "tui.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+static void clear_input_buffer(InputBuffer *input) {
+	input->count = 0;
+	input->key = 0;
+	memset(input->buffer, 0, sizeof(input->buffer));
+}
+
+static void on_motion_input(TuiMsg *msg, InputBuffer *input) {
+	if (input->key == KEY_MOTION_UP) {
+		msg->value.motion.direction = DIR_UP;
+	} else if (input->key == KEY_MOTION_DOWN) {
+		msg->value.motion.direction = DIR_DOWN;
+	} else if (input->key == KEY_MOTION_LEFT) {
+		msg->value.motion.direction = DIR_LEFT;
+	} else if (input->key == KEY_MOTION_RIGHT) {
+		msg->value.motion.direction = DIR_RIGHT;
+	}
+
+	if (input->count > 1 &&
+		input->buffer[input->count - 2] == KEY_CHORD_SWITCH_WIN) {
+
+		msg->type = MSG_CHANGE_SECTION;
+		msg->value.motion.amount.absolute = 1;
+	} else {
+		msg->type = MSG_BUFFER_MOTION;
+
+		if (input->key == KEY_CHORD_HALF_UP) {
+			msg->value.motion.direction = DIR_UP;
+			msg->value.motion.amount.relative = BUFFER_HALF;
+		} else if (input->key == KEY_CHORD_HALF_DOWN) {
+			msg->value.motion.direction = DIR_DOWN;
+			msg->value.motion.amount.relative = BUFFER_HALF;
+		} else if (input->key == KEY_MOTION_START_OF_FILE) {
+			if (input->count > 1 &&
+				input->buffer[input->count - 2] == input->key) {
+				msg->value.motion.amount.relative = BUFFER_START;
+			} else if (input->count == 1 ||
+					   input->buffer[input->count - 2] == input->key) {
+				/* Return early so we don't clear the input buffer */
+				return;
+			}
+		} else {
+			if (input->key == KEY_MOTION_LINE_SELECTOR) {
+				msg->type = MSG_GO_TO_BUFFER_LINE;
+			}
+
+			unsigned long abs_amount = 0;
+
+			char *num_begin = NULL;
+			for (int i = (int)input->count - 2; i >= 0; i--) {
+				if (!isdigit(input->buffer[i]))
+					break;
+				num_begin = input->buffer + i;
+			}
+			if (num_begin) {
+				abs_amount = strtoul(num_begin, NULL, 10);
+			}
+
+			msg->value.motion.amount.absolute = abs_amount;
+		}
+	}
+
+	clear_input_buffer(input);
+}
 
 /* Must be called by the child process */
 static void start_child_process(const char *inferior_path,
@@ -33,6 +99,8 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 
 	while (msg.type != MSG_QUIT) {
 		view_tui(model);
+		/* TODO: Function that gets the next msg by blocking and polling for
+		 * relevant events (input, signals, etc) */
 		get_input_key(&input);
 
 		switch (input.key) {
@@ -54,7 +122,7 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 		case KEY_MOTION_LINE_SELECTOR:
 		case KEY_CHORD_HALF_UP:
 		case KEY_CHORD_HALF_DOWN:
-			msg.type = MSG_MOTION;
+			on_motion_input(&msg, &input);
 			break;
 		default:
 			msg.type = MSG_NONE;
