@@ -1,6 +1,8 @@
 #ifndef DABUGGER_TUI_H
 #define DABUGGER_TUI_H
 
+#include "debug.h"
+
 #include <stddef.h>
 
 #define MAX_INPUT_BUFFER 10
@@ -61,6 +63,7 @@ typedef struct {
 } TuiCmd;
 
 typedef struct {
+	DebugSession *session;
 	bool is_picker_open;
 } TuiModel;
 
@@ -71,20 +74,13 @@ typedef struct {
 } InputBuffer;
 
 void open_tui();
-
-char get_input_key(InputBuffer *buffer);
+void close_tui();
 
 void update_tui(TuiMsg msg, TuiModel *model);
 void view_tui(TuiModel model);
 
-void close_tui();
-
-/*
-int open_tui();
-int close_tui();
-void set_picker_options(const char **options, size_t count);
-void set_picker_selected_callback(void (*on_selected)(const char **, size_t));
-void set_debug_line_info(const LineInfo *line_info);
-*/
+char get_input_key(InputBuffer *buffer);
+void clear_input_buffer(InputBuffer *input);
+void on_motion_input(TuiMsg *msg, InputBuffer *input);
 
 #endif /* DABUGGER_TUI_H */
