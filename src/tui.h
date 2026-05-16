@@ -29,31 +29,54 @@
 typedef enum {
 	MSG_NONE,
 	MSG_QUIT,
-	MSG_OPEN_PICKER,
+	MSG_SHOW_PICKER,
 	MSG_CONFIRM,
 	MSG_BUFFER_MOTION,
 	MSG_GO_TO_BUFFER_LINE,
 	MSG_CHANGE_SECTION
 } TuiMsgType;
 
+typedef enum {
+	CMD_NONE,
+} TuiCmdType;
+
+typedef enum {
+	WIN_SOURCE = 0,
+	WIN_ASSEMBLY,
+	WIN_OUTPUT,
+	WIN_REGISTERS,
+	WIN_PICKER,
+} TuiWindow;
+
 typedef struct {
-	enum { DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT } direction;
+	enum Direction { DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT } direction;
 	union {
-		enum { BUFFER_HALF, BUFFER_FULL, BUFFER_START, BUFFER_END } relative;
-		unsigned long absolute;
+		enum {
+			/* Used with MSG_BUFFER_MOTION  */
+			BUFFER_HALF = -3, /* Negative values so its possible to distinguish
+								 from absolute */
+			BUFFER_FULL = -2,
+
+			/* Used with MSG_GO_TO_BUFFER_LINE  */
+			BUFFER_START = -1,
+			BUFFER_END = 0, /* Needs to be 0 to coincide with absolute = 0 */
+		} relative;
+		unsigned absolute;
 	} amount;
 } TuiMotion;
+
+typedef struct {
+	LinesBuffer *buffer;
+	size_t selected_line;
+} TuiLinesBuffer;
 
 typedef struct {
 	TuiMsgType type;
 	union {
 		TuiMotion motion;
+		bool is_open;
 	} value;
 } TuiMsg;
-
-typedef enum {
-	CMD_NONE,
-} TuiCmdType;
 
 typedef struct {
 	TuiCmdType type;
@@ -63,13 +86,19 @@ typedef struct {
 } TuiCmd;
 
 typedef struct {
+	struct {
+		TuiLinesBuffer source;
+		TuiLinesBuffer assembly;
+		TuiLinesBuffer picker;
+	} buffers;
 	DebugSession *session;
+	TuiWindow focused_win;
 	bool is_picker_open;
 } TuiModel;
 
 typedef struct {
-	char buffer[MAX_INPUT_BUFFER];
-	char key;
+	int buffer[MAX_INPUT_BUFFER];
+	int key;
 	unsigned count;
 } InputBuffer;
 
@@ -79,7 +108,7 @@ void close_tui();
 void update_tui(TuiMsg msg, TuiModel *model);
 void view_tui(TuiModel model);
 
-char get_input_key(InputBuffer *buffer);
+int get_input_key(InputBuffer *buffer);
 void clear_input_buffer(InputBuffer *input);
 void on_motion_input(TuiMsg *msg, InputBuffer *input);
 

@@ -31,16 +31,17 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 
 	while (msg.type != MSG_QUIT) {
 		view_tui(model);
-		/* TODO: Function that gets the next msg by blocking and polling for
-		 * relevant events (input, signals, etc) */
+
 		get_input_key(&input);
+		/* TODO: Track other events (signals, etc) */
 
 		switch (input.key) {
 		case KEY_QUIT:
 			msg.type = MSG_QUIT;
 			break;
 		case KEY_CHORD_FILE_PICKER:
-			msg.type = MSG_OPEN_PICKER;
+			msg.type = MSG_SHOW_PICKER;
+			msg.value.is_open = !model.is_picker_open;
 			break;
 		case KEY_CONFIRM:
 			msg.type = MSG_CONFIRM;
