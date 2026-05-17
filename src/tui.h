@@ -87,9 +87,9 @@ typedef struct {
 
 typedef struct {
 	struct {
-		TuiLinesBuffer source;
-		TuiLinesBuffer assembly;
-		TuiLinesBuffer picker;
+		TuiLinesBuffer *source;
+		TuiLinesBuffer *assembly;
+		TuiLinesBuffer *picker;
 	} buffers;
 	DebugSession *session;
 	TuiWindow focused_win;
@@ -106,7 +106,7 @@ void open_tui();
 void close_tui();
 
 void update_tui(TuiMsg msg, TuiModel *model);
-void view_tui(TuiModel model);
+void view_tui(TuiModel *model);
 
 int get_input_key(InputBuffer *buffer);
 void clear_input_buffer(InputBuffer *input);

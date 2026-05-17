@@ -30,10 +30,10 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 	open_tui();
 
 	while (msg.type != MSG_QUIT) {
-		view_tui(model);
+		view_tui(&model);
 
 		get_input_key(&input);
-		/* TODO: Track other events (signals, etc) */
+		/* TODO: Track other events (SIGWINCH, other signals, etc) */
 
 		switch (input.key) {
 		case KEY_QUIT:

@@ -113,6 +113,13 @@ LinesBuffer *get_assembly_buffer(DebugSession *session,
 	return buffer;
 }
 
+/* The caller is responsible for freeing the returned buffer */
+LinesBuffer *get_file_picker_buffer(DebugSession *session) {
+	LinesBuffer *buffer = calloc(1, sizeof(LinesBuffer));
+	/* TODO */
+	return buffer;
+}
+
 void free_lines_buffer(LinesBuffer *buffer) {
 	for (size_t i = 0; i < buffer->line_count; i++) {
 		free((void *)buffer->lines[i]);

@@ -20,6 +20,7 @@ DebugSession *init_debug_session(const char *inferior_path);
 
 LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index);
 LinesBuffer *get_assembly_buffer(DebugSession *session, size_t comp_unit_index);
+LinesBuffer *get_file_picker_buffer(DebugSession *session);
 
 void free_lines_buffer(LinesBuffer *buffer);
 
