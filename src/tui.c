@@ -75,11 +75,17 @@ void update_tui(TuiMsg msg, TuiModel *model) {
 		} else if (msg.value.motion.direction == DIR_DOWN) {
 			size_t remaining_lines =
 				tui_buffer->buffer->line_count - 1 - tui_buffer->selected_line;
-			if (remaining_lines >= msg.value.motion.amount.absolute)
+			if (remaining_lines >= msg.value.motion.amount.absolute) {
 				tui_buffer->selected_line += msg.value.motion.amount.absolute;
+			} else {
+				tui_buffer->selected_line = tui_buffer->buffer->line_count - 1;
+			}
 		} else if (msg.value.motion.direction == DIR_UP) {
-			if (tui_buffer->selected_line >= msg.value.motion.amount.absolute)
+			if (tui_buffer->selected_line >= msg.value.motion.amount.absolute) {
 				tui_buffer->selected_line -= msg.value.motion.amount.absolute;
+			} else {
+				tui_buffer->selected_line = 0;
+			}
 		}
 
 		break;
@@ -89,6 +95,8 @@ void update_tui(TuiMsg msg, TuiModel *model) {
 
 		if (msg.value.motion.amount.relative == BUFFER_END) {
 			tui_buffer->selected_line = tui_buffer->buffer->line_count - 1;
+		} else if (msg.value.motion.amount.relative == BUFFER_START) {
+			tui_buffer->selected_line = 0;
 		} else {
 			size_t zero_indexed_line = msg.value.motion.amount.absolute - 1;
 			size_t line =
@@ -237,6 +245,18 @@ void view_tui(TuiModel *model) {
 	wattroff(picker_win, A_BOLD);
 
 	if (model->is_picker_open) {
+		TuiLinesBuffer *picker_buffer = model->buffers.picker;
+		for (size_t i = 0; i < picker_buffer->buffer->line_count; i++) {
+			if (i == picker_buffer->selected_line) {
+				wattron(picker_win, A_BOLD | COLOR_PAIR(ACTIVE_COLOR));
+				mvwprintw(picker_win, (int)i + 2, 2, "%s",
+						  picker_buffer->buffer->lines[i]);
+				wattroff(picker_win, A_BOLD | COLOR_PAIR(ACTIVE_COLOR));
+			} else {
+				mvwprintw(picker_win, (int)i + 2, 2, "%s",
+						  picker_buffer->buffer->lines[i]);
+			}
+		}
 		show_panel(picker_panel);
 	} else {
 		hide_panel(picker_panel);
@@ -344,7 +364,7 @@ void on_motion_input(TuiMsg *msg, InputBuffer *input) {
 				num_begin = input->buffer + i;
 			}
 			if (num_begin) {
-				/* FIX: Both casts here are possibly problematic */
+				/* FIX: Both casts here are problematic */
 				abs_amount = (unsigned)strtoul((char *)num_begin, NULL, 10);
 			}
 

@@ -25,6 +25,10 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 	TuiModel model = {.session = session, .is_picker_open = false};
 	TuiMsg msg = {.type = MSG_NONE};
 
+	TuiLinesBuffer picker_buffer = {.buffer = get_file_picker_buffer(session),
+									.selected_line = 0};
+	model.buffers.picker = &picker_buffer;
+
 	InputBuffer input = {0};
 
 	open_tui();
@@ -61,6 +65,8 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 			msg.type = MSG_NONE;
 			break;
 		}
+
+		/* TODO: Implement cmds */
 
 		update_tui(msg, &model);
 	}

@@ -71,13 +71,14 @@ LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index) {
 }
 
 /* The caller is responsible for freeing the returned buffer */
-LinesBuffer *get_assembly_buffer(DebugSession *session,
-								 size_t comp_unit_index) {
+AssemblyBuffer *get_assembly_buffer(DebugSession *session,
+									size_t comp_unit_index) {
 	if (comp_unit_index >= session->line_info->comp_unit_count) {
 		return NULL;
 	}
 
-	LinesBuffer *buffer = calloc(1, sizeof(LinesBuffer));
+	AssemblyBuffer *asm_buffer = calloc(1, sizeof(AssemblyBuffer));
+	LinesBuffer *buffer = asm_buffer->buffer;
 
 	LineInfoCompUnit comp_unit =
 		session->line_info->comp_units[comp_unit_index];
@@ -103,6 +104,10 @@ LinesBuffer *get_assembly_buffer(DebugSession *session,
 			buffer->line_count =
 				line_num + 1; /* Safer to update this every iteration */
 
+			asm_buffer->addresses = reallocarray(
+				asm_buffer->addresses, buffer->line_count, sizeof(size_t *));
+			asm_buffer->addresses[line_num] = instruction_addr;
+
 			strcpy((char *)buffer->lines[line_num], instruction.text);
 
 			line_num += 1;
@@ -110,13 +115,21 @@ LinesBuffer *get_assembly_buffer(DebugSession *session,
 		}
 	}
 
-	return buffer;
+	return asm_buffer;
 }
 
 /* The caller is responsible for freeing the returned buffer */
 LinesBuffer *get_file_picker_buffer(DebugSession *session) {
 	LinesBuffer *buffer = calloc(1, sizeof(LinesBuffer));
-	/* TODO */
+	buffer->lines = calloc(session->line_info->comp_unit_count, sizeof(char *));
+	buffer->line_count = session->line_info->comp_unit_count;
+
+	for (size_t i = 0; i < session->line_info->comp_unit_count; i++) {
+		const char *file_name =
+			session->line_info->comp_units[i].header->file_names[0].path;
+		buffer->lines[i] = file_name;
+	}
+
 	return buffer;
 }
 
