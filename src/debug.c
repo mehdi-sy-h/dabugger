@@ -78,7 +78,8 @@ AssemblyBuffer *get_assembly_buffer(DebugSession *session,
 	}
 
 	AssemblyBuffer *asm_buffer = calloc(1, sizeof(AssemblyBuffer));
-	LinesBuffer *buffer = asm_buffer->buffer;
+	LinesBuffer *buffer = calloc(1, sizeof(LinesBuffer));
+	asm_buffer->text_buffer = buffer;
 
 	LineInfoCompUnit comp_unit =
 		session->line_info->comp_units[comp_unit_index];

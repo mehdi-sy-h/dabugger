@@ -27,17 +27,20 @@
 #define KEY_EXECUTE_PROG 'R'
 
 typedef enum {
-	MSG_NONE,
+	MSG_NONE = 0,
 	MSG_QUIT,
 	MSG_SHOW_PICKER,
 	MSG_CONFIRM,
 	MSG_BUFFER_MOTION,
 	MSG_GO_TO_BUFFER_LINE,
-	MSG_CHANGE_SECTION
+	MSG_CHANGE_SECTION,
+	MSG_SET_SOURCE_BUFFER,
+	MSG_SET_ASSEMBLY_BUFFER,
 } TuiMsgType;
 
 typedef enum {
-	CMD_NONE,
+	CMD_NONE = 0,
+	CMD_SELECT_COMP_UNIT,
 } TuiCmdType;
 
 typedef enum {
@@ -66,30 +69,48 @@ typedef struct {
 } TuiMotion;
 
 typedef struct {
-	LinesBuffer *buffer;
-	size_t selected_line;
-} TuiLinesBuffer;
-
-typedef struct {
 	TuiMsgType type;
 	union {
 		TuiMotion motion;
 		bool is_open;
+		LinesBuffer *new_source_buffer;
+		AssemblyBuffer *new_assembly_buffer;
 	} value;
 } TuiMsg;
 
 typedef struct {
 	TuiCmdType type;
 	union {
-
+		size_t comp_unit_index;
 	} value;
 } TuiCmd;
 
 typedef struct {
+	size_t selected_line;
+	size_t line_count;
+	size_t line_pos;
+	LinesBuffer *buffer;
+} TuiLinesBuffer;
+
+typedef struct {
+	size_t selected_line;
+	size_t line_count;
+	size_t line_pos;
+	AssemblyBuffer *buffer;
+} TuiAssemblyBuffer;
+
+typedef struct {
+	size_t selected_line;
+	size_t line_count;
+	size_t line_pos;
+	void *buffer;
+} TuiBuffer;
+
+typedef struct {
 	struct {
-		TuiLinesBuffer *source;
-		TuiLinesBuffer *assembly;
-		TuiLinesBuffer *picker;
+		TuiLinesBuffer source;
+		TuiAssemblyBuffer assembly;
+		TuiLinesBuffer picker;
 	} buffers;
 	DebugSession *session;
 	TuiWindow focused_win;
@@ -105,7 +126,7 @@ typedef struct {
 void open_tui();
 void close_tui();
 
-void update_tui(TuiMsg msg, TuiModel *model);
+TuiCmd update_tui(TuiMsg msg, TuiModel *model);
 void view_tui(TuiModel *model);
 
 int get_input_key(InputBuffer *buffer);

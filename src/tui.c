@@ -22,6 +22,13 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+#define VERTICAL_LINE_CHAR L"\u2502"	 /* │ */
+#define HORIZONTAL_LINE_CHAR L"\u2500"	 /* ─ */
+#define TL_ROUNDED_CORNER_CHAR L"\u256D" /* ╭ */
+#define TR_ROUNDED_CORNER_CHAR L"\u256E" /* ╮ */
+#define BL_ROUNDED_CORNER_CHAR L"\u2570" /* ╰ */
+#define BR_ROUNDED_CORNER_CHAR L"\u256F" /* ╯ */
+
 void open_tui() {
 	setlocale(LC_ALL, "");
 
@@ -45,24 +52,25 @@ void close_tui() {
 	endwin();
 }
 
-static TuiLinesBuffer *get_focused_buffer(TuiModel *model) {
+static TuiBuffer *get_focused_buffer(TuiModel *model) {
 	if (model->focused_win == WIN_SOURCE) {
-		return model->buffers.source;
+		return (TuiBuffer *)&model->buffers.source;
 	} else if (model->focused_win == WIN_ASSEMBLY) {
-		return model->buffers.assembly;
+		return (TuiBuffer *)&model->buffers.assembly;
 	} else if (model->focused_win == WIN_PICKER) {
-		return model->buffers.picker;
+		return (TuiBuffer *)&model->buffers.picker;
 	}
 	return NULL;
 }
 
-void update_tui(TuiMsg msg, TuiModel *model) {
-	TuiLinesBuffer *tui_buffer = get_focused_buffer(model);
+TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
+	TuiBuffer *tui_buffer = get_focused_buffer(model);
+	TuiCmd cmd = {.type = CMD_NONE};
 
 	switch (msg.type) {
 	case MSG_BUFFER_MOTION:
-		if (!tui_buffer || tui_buffer->buffer->line_count == 0)
-			return;
+		if (!tui_buffer || tui_buffer->line_count == 0)
+			break;
 
 		/* This should only be the case for MSG_GO_TO_BUFFER_LINE */
 		assert(msg.value.motion.amount.relative != BUFFER_START &&
@@ -74,11 +82,11 @@ void update_tui(TuiMsg msg, TuiModel *model) {
 			/* TODO */
 		} else if (msg.value.motion.direction == DIR_DOWN) {
 			size_t remaining_lines =
-				tui_buffer->buffer->line_count - 1 - tui_buffer->selected_line;
+				tui_buffer->line_count - 1 - tui_buffer->selected_line;
 			if (remaining_lines >= msg.value.motion.amount.absolute) {
 				tui_buffer->selected_line += msg.value.motion.amount.absolute;
 			} else {
-				tui_buffer->selected_line = tui_buffer->buffer->line_count - 1;
+				tui_buffer->selected_line = tui_buffer->line_count - 1;
 			}
 		} else if (msg.value.motion.direction == DIR_UP) {
 			if (tui_buffer->selected_line >= msg.value.motion.amount.absolute) {
@@ -88,27 +96,30 @@ void update_tui(TuiMsg msg, TuiModel *model) {
 			}
 		}
 
+		/* TODO: Update buffer position */
+
 		break;
 	case MSG_GO_TO_BUFFER_LINE:
 		if (!tui_buffer)
-			return;
+			break;
 
 		if (msg.value.motion.amount.relative == BUFFER_END) {
-			tui_buffer->selected_line = tui_buffer->buffer->line_count - 1;
+			tui_buffer->selected_line = tui_buffer->line_count - 1;
 		} else if (msg.value.motion.amount.relative == BUFFER_START) {
 			tui_buffer->selected_line = 0;
 		} else {
 			size_t zero_indexed_line = msg.value.motion.amount.absolute - 1;
-			size_t line =
-				MIN(zero_indexed_line, tui_buffer->buffer->line_count - 1);
+			size_t line = MIN(zero_indexed_line, tui_buffer->line_count - 1);
 			tui_buffer->selected_line = line;
 		}
+
+		/* TODO: Update buffer position */
 
 		break;
 	case MSG_CHANGE_SECTION:
 		TuiWindow focused = model->focused_win;
 		if (focused == WIN_PICKER)
-			return;
+			break;
 
 		enum Direction direction = msg.value.motion.direction;
 
@@ -125,6 +136,8 @@ void update_tui(TuiMsg msg, TuiModel *model) {
 
 		break;
 	case MSG_CONFIRM:
+		cmd.type = CMD_SELECT_COMP_UNIT;
+		cmd.value.comp_unit_index = model->buffers.picker.selected_line;
 		break;
 	case MSG_SHOW_PICKER:
 		model->is_picker_open = msg.value.is_open;
@@ -134,29 +147,119 @@ void update_tui(TuiMsg msg, TuiModel *model) {
 			model->focused_win = WIN_SOURCE;
 		}
 		break;
+	case MSG_SET_SOURCE_BUFFER:
+		model->buffers.source.selected_line = 0;
+		model->buffers.source.buffer = msg.value.new_source_buffer;
+		model->buffers.source.line_count =
+			msg.value.new_source_buffer->line_count;
+		break;
+	case MSG_SET_ASSEMBLY_BUFFER:
+		model->buffers.assembly.selected_line = 0;
+		model->buffers.assembly.buffer = msg.value.new_assembly_buffer;
+		model->buffers.assembly.line_count =
+			msg.value.new_assembly_buffer->text_buffer->line_count;
+		break;
 	case MSG_QUIT:
 	case MSG_NONE:
-	default:
 		break;
 	}
+	return cmd;
 }
 
 static void set_win_border(WINDOW *win, attr_t attr, short color_pair) {
 	static cchar_t ls, rs, ts, bs, tl, tr, bl, br;
-	setcchar(&ls, L"\u2502", attr, color_pair, NULL); /* │ */
-	setcchar(&rs, L"\u2502", attr, color_pair, NULL); /* │ */
-	setcchar(&ts, L"\u2500", attr, color_pair, NULL); /* ─ */
-	setcchar(&bs, L"\u2500", attr, color_pair, NULL); /* ─ */
-	setcchar(&tl, L"\u256D", attr, color_pair, NULL); /* ╭ */
-	setcchar(&tr, L"\u256E", attr, color_pair, NULL); /* ╮ */
-	setcchar(&bl, L"\u2570", attr, color_pair, NULL); /* ╰ */
-	setcchar(&br, L"\u256F", attr, color_pair, NULL); /* ╯ */
+	setcchar(&ls, VERTICAL_LINE_CHAR, attr, color_pair, NULL);
+	setcchar(&rs, VERTICAL_LINE_CHAR, attr, color_pair, NULL);
+	setcchar(&ts, HORIZONTAL_LINE_CHAR, attr, color_pair, NULL);
+	setcchar(&bs, HORIZONTAL_LINE_CHAR, attr, color_pair, NULL);
+	setcchar(&tl, TL_ROUNDED_CORNER_CHAR, attr, color_pair, NULL);
+	setcchar(&tr, TR_ROUNDED_CORNER_CHAR, attr, color_pair, NULL);
+	setcchar(&bl, BL_ROUNDED_CORNER_CHAR, attr, color_pair, NULL);
+	setcchar(&br, BR_ROUNDED_CORNER_CHAR, attr, color_pair, NULL);
 	wborder_set(win, &ls, &rs, &ts, &bs, &tl, &tr, &bl, &br);
+}
+
+static void view_source_buffer(TuiModel *model, WINDOW *source_win) {
+	unsigned rows, cols;
+	getmaxyx(source_win, rows, cols);
+
+	rows -= 3; /* Accounting for top title and bottom margin */
+	cols -= 8; /* Accounting for left line number and right margin */
+
+	for (size_t i = 0; i < rows; i++) {
+		const size_t zero_indexed_line_num = model->buffers.source.line_pos + i;
+		if (zero_indexed_line_num >= model->buffers.source.line_count)
+			break;
+
+		/* TODO: Handle error case (and in all occurences of memory
+		 * allocation in the codebase) */
+		char *line =
+			strdup(model->buffers.source.buffer->lines[zero_indexed_line_num]);
+
+		/* TODO: Replace tabs with 4 spaces instead of 1 */
+		for (size_t c = 0; c < strlen(line); c++) {
+			if (line[c] == '\t')
+				line[c] = ' ';
+		}
+
+		bool is_selected_line =
+			zero_indexed_line_num == model->buffers.source.selected_line;
+		attr_t line_attrs =
+			A_NORMAL | (is_selected_line ? A_STANDOUT | COLOR_PAIR(ACTIVE_COLOR)
+										 : COLOR_PAIR(INACTIVE_COLOR));
+
+		/* TODO: Line wrapping instead of truncation */
+		wattron(source_win, line_attrs);
+		mvwprintw(source_win, (int)i + 2, 1, "%4d",
+				  (int)zero_indexed_line_num + 1);
+		waddwstr(source_win, VERTICAL_LINE_CHAR);
+		wprintw(source_win, " %.*s", cols, line);
+		wattroff(source_win, line_attrs);
+
+		free(line);
+	}
+}
+
+static void view_assembly_buffer(TuiModel *model, WINDOW *assembly_win) {
+	unsigned rows, cols;
+	getmaxyx(assembly_win, rows, cols);
+
+	rows -= 3; /* Accounting for top title and bottom margin */
+	cols -= 8; /* Accounting for left line number and right margin */
+
+	TuiAssemblyBuffer assembly = model->buffers.assembly;
+
+	for (size_t i = 0; i < rows; i++) {
+		const size_t zero_indexed_line_num = assembly.line_pos + i;
+		if (zero_indexed_line_num >= assembly.line_count)
+			break;
+
+		/* TODO: Handle error case (and in all occurences of memory
+		 * allocation in the codebase) */
+		char *line =
+			strdup(assembly.buffer->text_buffer->lines[zero_indexed_line_num]);
+
+		bool is_selected_line = zero_indexed_line_num == assembly.selected_line;
+		attr_t line_attrs =
+			A_NORMAL | (is_selected_line ? A_STANDOUT | COLOR_PAIR(ACTIVE_COLOR)
+										 : COLOR_PAIR(INACTIVE_COLOR));
+
+		/* TODO: Line wrapping instead of truncation */
+		wattron(assembly_win, line_attrs);
+		mvwprintw(assembly_win, (int)i + 2, 1, "%16lx",
+				  assembly.buffer->addresses[i]);
+		waddwstr(assembly_win, VERTICAL_LINE_CHAR);
+		wprintw(assembly_win, " %.*s", cols, line);
+		wattroff(assembly_win, line_attrs);
+
+		free(line);
+	}
 }
 
 void view_tui(TuiModel *model) {
 	unsigned rows, cols;
 	getmaxyx(stdscr, rows, cols);
+	/* TODO: Display something else if screen too small */
 
 	/* Source */
 	static WINDOW *source_win = NULL;
@@ -175,6 +278,8 @@ void view_tui(TuiModel *model) {
 	mvwprintw(source_win, 1, 2, "%s", "Source");
 	wattroff(source_win, A_BOLD);
 
+	view_source_buffer(model, source_win);
+
 	/* Assembly */
 	static WINDOW *assembly_win = NULL;
 	if (!assembly_win) {
@@ -191,6 +296,16 @@ void view_tui(TuiModel *model) {
 	wattron(assembly_win, A_BOLD);
 	mvwprintw(assembly_win, 1, 2, "%s", "Assembly");
 	wattroff(assembly_win, A_BOLD);
+
+	/* TODO: Member access here is kinda yucky, find a nicer structure */
+	view_assembly_buffer(model, assembly_win);
+	/*
+	for (size_t i = 0; i < model->buffers.assembly.line_count; i++) {
+		mvwprintw(assembly_win, (int)i + 2, 2, "%lx:  %s",
+				  model->buffers.assembly.buffer->addresses[i],
+				  model->buffers.assembly.buffer->text_buffer->lines[i]);
+	}
+	*/
 
 	/* Output */
 	static WINDOW *output_win = NULL;
@@ -245,16 +360,16 @@ void view_tui(TuiModel *model) {
 	wattroff(picker_win, A_BOLD);
 
 	if (model->is_picker_open) {
-		TuiLinesBuffer *picker_buffer = model->buffers.picker;
-		for (size_t i = 0; i < picker_buffer->buffer->line_count; i++) {
-			if (i == picker_buffer->selected_line) {
+		TuiLinesBuffer picker_buffer = model->buffers.picker;
+		for (size_t i = 0; i < picker_buffer.buffer->line_count; i++) {
+			if (i == picker_buffer.selected_line) {
 				wattron(picker_win, A_BOLD | COLOR_PAIR(ACTIVE_COLOR));
 				mvwprintw(picker_win, (int)i + 2, 2, "%s",
-						  picker_buffer->buffer->lines[i]);
+						  picker_buffer.buffer->lines[i]);
 				wattroff(picker_win, A_BOLD | COLOR_PAIR(ACTIVE_COLOR));
 			} else {
 				mvwprintw(picker_win, (int)i + 2, 2, "%s",
-						  picker_buffer->buffer->lines[i]);
+						  picker_buffer.buffer->lines[i]);
 			}
 		}
 		show_panel(picker_panel);
