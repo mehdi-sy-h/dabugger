@@ -98,7 +98,6 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 			case KEY_MOTION_DOWN:
 			case KEY_MOTION_LEFT:
 			case KEY_MOTION_RIGHT:
-			/* TODO: Keypad character support (for Page Up/Down) */
 			case KEY_MOTION_START_OF_FILE:
 			case KEY_MOTION_LINE_SELECTOR:
 			case KEY_CHORD_HALF_UP:

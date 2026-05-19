@@ -16,11 +16,17 @@
 #define SECTION_COLS 2
 #define SECTION_COUNT (SECTION_ROWS * SECTION_COLS)
 
+#define MIN_TERM_ROWS 20
+#define MIN_TERM_COLS 20
+
 #define INACTIVE_COLOR 0
 #define ACTIVE_COLOR 1
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+#define QUOTE(name) #name
+#define STR(macro) QUOTE(macro)
 
 #define VERTICAL_LINE_CHAR L"\u2502"	 /* │ */
 #define HORIZONTAL_LINE_CHAR L"\u2500"	 /* ─ */
@@ -73,8 +79,11 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 			break;
 
 		/* This should only be the case for MSG_GO_TO_BUFFER_LINE */
-		assert(msg.value.motion.amount.relative != BUFFER_START &&
-			   msg.value.motion.amount.relative != BUFFER_END);
+		assert(msg.value.motion.amount.relative != BUFFER_START);
+
+		/* In case we get something like 0j */
+		if (msg.value.motion.amount.relative == BUFFER_START)
+			break;
 
 		if (msg.value.motion.amount.relative == BUFFER_HALF) {
 			/* TODO */
@@ -96,7 +105,18 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 			}
 		}
 
-		/* TODO: Update buffer position */
+		/* TODO: Update buffer position here instead? */
+		/*
+		size_t selected_line = tui_buffer->selected_line;
+
+		if (selected_line < tui_buffer->line_pos) {
+			tui_buffer->line_pos = selected_line;
+		} else if (selected_line + 1 > model->term_rows &&
+				   selected_line + 1 >
+					   tui_buffer->line_pos + model->term_rows) {
+			tui_buffer->line_pos = selected_line + 1 - model->term_rows;
+		}
+		*/
 
 		break;
 	case MSG_GO_TO_BUFFER_LINE:
@@ -113,7 +133,7 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 			tui_buffer->selected_line = line;
 		}
 
-		/* TODO: Update buffer position */
+		/* TODO: Update buffer position here instead? */
 
 		break;
 	case MSG_CHANGE_SECTION:
@@ -186,15 +206,26 @@ static void view_source_buffer(TuiModel *model, WINDOW *source_win) {
 	rows -= 3; /* Accounting for top title and bottom margin */
 	cols -= 8; /* Accounting for left line number and right margin */
 
+	TuiLinesBuffer source = model->buffers.source;
+
+	static size_t buffer_start_pos = 0;
+	size_t selected_line = source.selected_line;
+
+	if (selected_line < buffer_start_pos) {
+		buffer_start_pos = selected_line;
+	} else if (selected_line + 1 > rows &&
+			   selected_line + 1 > buffer_start_pos + rows) {
+		buffer_start_pos = selected_line + 1 - rows;
+	}
+
 	for (size_t i = 0; i < rows; i++) {
-		const size_t zero_indexed_line_num = model->buffers.source.line_pos + i;
-		if (zero_indexed_line_num >= model->buffers.source.line_count)
+		const size_t zero_indexed_line_num = buffer_start_pos + i;
+		if (zero_indexed_line_num >= source.line_count)
 			break;
 
 		/* TODO: Handle error case (and in all occurences of memory
 		 * allocation in the codebase) */
-		char *line =
-			strdup(model->buffers.source.buffer->lines[zero_indexed_line_num]);
+		char *line = strdup(source.buffer->lines[zero_indexed_line_num]);
 
 		/* TODO: Replace tabs with 4 spaces instead of 1 */
 		for (size_t c = 0; c < strlen(line); c++) {
@@ -202,16 +233,14 @@ static void view_source_buffer(TuiModel *model, WINDOW *source_win) {
 				line[c] = ' ';
 		}
 
-		bool is_selected_line =
-			zero_indexed_line_num == model->buffers.source.selected_line;
+		bool is_selected_line = zero_indexed_line_num == source.selected_line;
 		attr_t line_attrs =
 			A_NORMAL | (is_selected_line ? A_STANDOUT | COLOR_PAIR(ACTIVE_COLOR)
 										 : COLOR_PAIR(INACTIVE_COLOR));
 
 		/* TODO: Line wrapping instead of truncation */
 		wattron(source_win, line_attrs);
-		mvwprintw(source_win, (int)i + 2, 1, "%4d",
-				  (int)zero_indexed_line_num + 1);
+		mvwprintw(source_win, (int)i + 2, 1, "%4ld", zero_indexed_line_num + 1);
 		waddwstr(source_win, VERTICAL_LINE_CHAR);
 		wprintw(source_win, " %.*s", cols, line);
 		wattroff(source_win, line_attrs);
@@ -229,8 +258,18 @@ static void view_assembly_buffer(TuiModel *model, WINDOW *assembly_win) {
 
 	TuiAssemblyBuffer assembly = model->buffers.assembly;
 
+	static size_t buffer_start_pos = 0;
+	size_t selected_line = assembly.selected_line;
+
+	if (selected_line < buffer_start_pos) {
+		buffer_start_pos = selected_line;
+	} else if (selected_line + 1 > rows &&
+			   selected_line + 1 > buffer_start_pos + rows) {
+		buffer_start_pos = selected_line + 1 - rows;
+	}
+
 	for (size_t i = 0; i < rows; i++) {
-		const size_t zero_indexed_line_num = assembly.line_pos + i;
+		const size_t zero_indexed_line_num = buffer_start_pos + i;
 		if (zero_indexed_line_num >= assembly.line_count)
 			break;
 
@@ -246,8 +285,9 @@ static void view_assembly_buffer(TuiModel *model, WINDOW *assembly_win) {
 
 		/* TODO: Line wrapping instead of truncation */
 		wattron(assembly_win, line_attrs);
-		mvwprintw(assembly_win, (int)i + 2, 1, "%16lx",
-				  assembly.buffer->addresses[i]);
+		mvwprintw(assembly_win, (int)i + 2, 1, "%4ld %16lx",
+				  zero_indexed_line_num + 1,
+				  assembly.buffer->addresses[zero_indexed_line_num]);
 		waddwstr(assembly_win, VERTICAL_LINE_CHAR);
 		wprintw(assembly_win, " %.*s", cols, line);
 		wattroff(assembly_win, line_attrs);
@@ -259,7 +299,18 @@ static void view_assembly_buffer(TuiModel *model, WINDOW *assembly_win) {
 void view_tui(TuiModel *model) {
 	unsigned rows, cols;
 	getmaxyx(stdscr, rows, cols);
-	/* TODO: Display something else if screen too small */
+
+	if (rows < MIN_TERM_ROWS || cols < MIN_TERM_COLS) {
+		/* TODO: Display warning if screen too small */
+		update_panels();
+		doupdate();
+		return;
+	}
+
+	/* TODO: Find a nice way to move this side effect out of here or move it to
+	 * a cmd triggered by update */
+	model->term_rows = rows;
+	model->term_cols = rows;
 
 	/* Source */
 	static WINDOW *source_win = NULL;
@@ -297,15 +348,7 @@ void view_tui(TuiModel *model) {
 	mvwprintw(assembly_win, 1, 2, "%s", "Assembly");
 	wattroff(assembly_win, A_BOLD);
 
-	/* TODO: Member access here is kinda yucky, find a nicer structure */
 	view_assembly_buffer(model, assembly_win);
-	/*
-	for (size_t i = 0; i < model->buffers.assembly.line_count; i++) {
-		mvwprintw(assembly_win, (int)i + 2, 2, "%lx:  %s",
-				  model->buffers.assembly.buffer->addresses[i],
-				  model->buffers.assembly.buffer->text_buffer->lines[i]);
-	}
-	*/
 
 	/* Output */
 	static WINDOW *output_win = NULL;
@@ -413,8 +456,8 @@ void view_tui(TuiModel *model) {
 	doupdate();
 }
 
-int get_input_key(InputBuffer *input) {
-	int key = getch();
+char get_input_key(InputBuffer *input) {
+	char key = getch();
 	if (++input->count == MAX_INPUT_BUFFER) {
 		clear_input_buffer(input);
 		input->count = 1;
@@ -442,6 +485,7 @@ void on_motion_input(TuiMsg *msg, InputBuffer *input) {
 		msg->value.motion.direction = DIR_RIGHT;
 	}
 
+	/* FIX: Ctrl+J makes the selected line go to start of buffer */
 	if (input->count > 1 &&
 		input->buffer[input->count - 2] == KEY_CHORD_SWITCH_WIN) {
 
@@ -470,17 +514,16 @@ void on_motion_input(TuiMsg *msg, InputBuffer *input) {
 							? MSG_GO_TO_BUFFER_LINE
 							: MSG_BUFFER_MOTION;
 
-			unsigned abs_amount = msg->type == MSG_BUFFER_MOTION ? 1 : 0;
+			unsigned long abs_amount = msg->type == MSG_BUFFER_MOTION ? 1 : 0;
 
-			int *num_begin = NULL;
+			char *num_begin = NULL;
 			for (int i = (int)input->count - 2; i >= 0; i--) {
 				if (!isdigit(input->buffer[i]))
 					break;
 				num_begin = input->buffer + i;
 			}
 			if (num_begin) {
-				/* FIX: Both casts here are problematic */
-				abs_amount = (unsigned)strtoul((char *)num_begin, NULL, 10);
+				abs_amount = strtoul(num_begin, NULL, 10);
 			}
 
 			if (msg->type == MSG_GO_TO_BUFFER_LINE && abs_amount == 0) {

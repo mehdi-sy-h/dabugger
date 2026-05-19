@@ -64,7 +64,7 @@ typedef struct {
 			BUFFER_START = -1,
 			BUFFER_END = 0, /* Needs to be 0 to coincide with absolute = 0 */
 		} relative;
-		unsigned absolute;
+		unsigned long absolute;
 	} amount;
 } TuiMotion;
 
@@ -115,12 +115,14 @@ typedef struct {
 	DebugSession *session;
 	TuiWindow focused_win;
 	bool is_picker_open;
+	unsigned term_rows;
+	unsigned term_cols;
 } TuiModel;
 
 typedef struct {
-	int buffer[MAX_INPUT_BUFFER];
-	int key;
-	unsigned count;
+	char buffer[MAX_INPUT_BUFFER];
+	char key;
+	uint8_t count;
 } InputBuffer;
 
 void open_tui();
@@ -129,7 +131,7 @@ void close_tui();
 TuiCmd update_tui(TuiMsg msg, TuiModel *model);
 void view_tui(TuiModel *model);
 
-int get_input_key(InputBuffer *buffer);
+char get_input_key(InputBuffer *buffer);
 void clear_input_buffer(InputBuffer *input);
 void on_motion_input(TuiMsg *msg, InputBuffer *input);
 
