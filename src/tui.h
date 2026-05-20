@@ -115,8 +115,6 @@ typedef struct {
 	DebugSession *session;
 	TuiWindow focused_win;
 	bool is_picker_open;
-	unsigned term_rows;
-	unsigned term_cols;
 } TuiModel;
 
 typedef struct {

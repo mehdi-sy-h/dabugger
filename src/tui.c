@@ -19,6 +19,9 @@
 #define MIN_TERM_ROWS 20
 #define MIN_TERM_COLS 20
 
+/* The top line, section title and bottom line occupy 3 rows per section */
+#define SECTION_ROW_MARGIN 3
+
 #define INACTIVE_COLOR 0
 #define ACTIVE_COLOR 1
 
@@ -34,6 +37,13 @@
 #define TR_ROUNDED_CORNER_CHAR L"\u256E" /* ╮ */
 #define BL_ROUNDED_CORNER_CHAR L"\u2570" /* ╰ */
 #define BR_ROUNDED_CORNER_CHAR L"\u256F" /* ╯ */
+
+static WINDOW *source_win = NULL;
+static WINDOW *assembly_win = NULL;
+static WINDOW *output_win = NULL;
+static WINDOW *registers_win = NULL;
+static WINDOW *picker_win = NULL;
+static PANEL *picker_panel = NULL;
 
 void open_tui() {
 	setlocale(LC_ALL, "");
@@ -58,20 +68,24 @@ void close_tui() {
 	endwin();
 }
 
-static TuiBuffer *get_focused_buffer(TuiModel *model) {
-	if (model->focused_win == WIN_SOURCE) {
-		return (TuiBuffer *)&model->buffers.source;
-	} else if (model->focused_win == WIN_ASSEMBLY) {
-		return (TuiBuffer *)&model->buffers.assembly;
-	} else if (model->focused_win == WIN_PICKER) {
-		return (TuiBuffer *)&model->buffers.picker;
-	}
-	return NULL;
-}
-
 TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
-	TuiBuffer *tui_buffer = get_focused_buffer(model);
 	TuiCmd cmd = {.type = CMD_NONE};
+
+	TuiBuffer *tui_buffer = NULL;
+	unsigned tui_buffer_rows = 0;
+
+	/* TODO: Find a nice way to move the getmaxy() side effect out of here or
+	 * move it to a cmd or whatever */
+	if (model->focused_win == WIN_SOURCE) {
+		tui_buffer = (TuiBuffer *)&model->buffers.source;
+		tui_buffer_rows = (unsigned)getmaxy(source_win) - SECTION_ROW_MARGIN;
+	} else if (model->focused_win == WIN_ASSEMBLY) {
+		tui_buffer = (TuiBuffer *)&model->buffers.assembly;
+		tui_buffer_rows = (unsigned)getmaxy(assembly_win) - SECTION_ROW_MARGIN;
+	} else if (model->focused_win == WIN_PICKER) {
+		tui_buffer = (TuiBuffer *)&model->buffers.picker;
+		tui_buffer_rows = (unsigned)getmaxy(picker_win) - SECTION_ROW_MARGIN;
+	}
 
 	switch (msg.type) {
 	case MSG_BUFFER_MOTION:
@@ -82,41 +96,44 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 		assert(msg.value.motion.amount.relative != BUFFER_START);
 
 		/* In case we get something like 0j */
-		if (msg.value.motion.amount.relative == BUFFER_START)
+		if (msg.value.motion.amount.relative == BUFFER_END)
 			break;
+
+		unsigned long line_distance = 0;
 
 		if (msg.value.motion.amount.relative == BUFFER_HALF) {
 			/* TODO */
+			line_distance = tui_buffer_rows / 2;
 		} else if (msg.value.motion.amount.relative == BUFFER_FULL) {
-			/* TODO */
-		} else if (msg.value.motion.direction == DIR_DOWN) {
+			line_distance = tui_buffer_rows;
+		} else {
+			line_distance = msg.value.motion.amount.absolute;
+		}
+
+		if (msg.value.motion.direction == DIR_DOWN) {
 			size_t remaining_lines =
 				tui_buffer->line_count - 1 - tui_buffer->selected_line;
-			if (remaining_lines >= msg.value.motion.amount.absolute) {
-				tui_buffer->selected_line += msg.value.motion.amount.absolute;
+			if (remaining_lines >= line_distance) {
+				tui_buffer->selected_line += line_distance;
 			} else {
 				tui_buffer->selected_line = tui_buffer->line_count - 1;
 			}
 		} else if (msg.value.motion.direction == DIR_UP) {
-			if (tui_buffer->selected_line >= msg.value.motion.amount.absolute) {
-				tui_buffer->selected_line -= msg.value.motion.amount.absolute;
+			if (tui_buffer->selected_line >= line_distance) {
+				tui_buffer->selected_line -= line_distance;
 			} else {
 				tui_buffer->selected_line = 0;
 			}
 		}
 
-		/* TODO: Update buffer position here instead? */
-		/*
-		size_t selected_line = tui_buffer->selected_line;
-
-		if (selected_line < tui_buffer->line_pos) {
-			tui_buffer->line_pos = selected_line;
-		} else if (selected_line + 1 > model->term_rows &&
-				   selected_line + 1 >
-					   tui_buffer->line_pos + model->term_rows) {
-			tui_buffer->line_pos = selected_line + 1 - model->term_rows;
+		if (tui_buffer->selected_line < tui_buffer->line_pos) {
+			tui_buffer->line_pos = tui_buffer->selected_line;
+		} else if (tui_buffer->selected_line + 1 > tui_buffer_rows &&
+				   tui_buffer->selected_line + 1 >
+					   tui_buffer->line_pos + tui_buffer_rows) {
+			tui_buffer->line_pos =
+				tui_buffer->selected_line + 1 - tui_buffer_rows;
 		}
-		*/
 
 		break;
 	case MSG_GO_TO_BUFFER_LINE:
@@ -133,7 +150,14 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 			tui_buffer->selected_line = line;
 		}
 
-		/* TODO: Update buffer position here instead? */
+		if (tui_buffer->selected_line < tui_buffer->line_pos) {
+			tui_buffer->line_pos = tui_buffer->selected_line;
+		} else if (tui_buffer->selected_line + 1 > tui_buffer_rows &&
+				   tui_buffer->selected_line + 1 >
+					   tui_buffer->line_pos + tui_buffer_rows) {
+			tui_buffer->line_pos =
+				tui_buffer->selected_line + 1 - tui_buffer_rows;
+		}
 
 		break;
 	case MSG_CHANGE_SECTION:
@@ -168,12 +192,14 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 		}
 		break;
 	case MSG_SET_SOURCE_BUFFER:
+		model->buffers.source.line_pos = 0;
 		model->buffers.source.selected_line = 0;
 		model->buffers.source.buffer = msg.value.new_source_buffer;
 		model->buffers.source.line_count =
 			msg.value.new_source_buffer->line_count;
 		break;
 	case MSG_SET_ASSEMBLY_BUFFER:
+		model->buffers.assembly.line_pos = 0;
 		model->buffers.assembly.selected_line = 0;
 		model->buffers.assembly.buffer = msg.value.new_assembly_buffer;
 		model->buffers.assembly.line_count =
@@ -199,27 +225,17 @@ static void set_win_border(WINDOW *win, attr_t attr, short color_pair) {
 	wborder_set(win, &ls, &rs, &ts, &bs, &tl, &tr, &bl, &br);
 }
 
-static void view_source_buffer(TuiModel *model, WINDOW *source_win) {
+static void view_source_buffer(TuiModel *model) {
 	unsigned rows, cols;
 	getmaxyx(source_win, rows, cols);
 
-	rows -= 3; /* Accounting for top title and bottom margin */
+	rows -= SECTION_ROW_MARGIN; /* Accounting for top title and bottom margin */
 	cols -= 8; /* Accounting for left line number and right margin */
 
 	TuiLinesBuffer source = model->buffers.source;
 
-	static size_t buffer_start_pos = 0;
-	size_t selected_line = source.selected_line;
-
-	if (selected_line < buffer_start_pos) {
-		buffer_start_pos = selected_line;
-	} else if (selected_line + 1 > rows &&
-			   selected_line + 1 > buffer_start_pos + rows) {
-		buffer_start_pos = selected_line + 1 - rows;
-	}
-
 	for (size_t i = 0; i < rows; i++) {
-		const size_t zero_indexed_line_num = buffer_start_pos + i;
+		size_t zero_indexed_line_num = source.line_pos + i;
 		if (zero_indexed_line_num >= source.line_count)
 			break;
 
@@ -249,27 +265,18 @@ static void view_source_buffer(TuiModel *model, WINDOW *source_win) {
 	}
 }
 
-static void view_assembly_buffer(TuiModel *model, WINDOW *assembly_win) {
+static void view_assembly_buffer(TuiModel *model) {
 	unsigned rows, cols;
 	getmaxyx(assembly_win, rows, cols);
 
-	rows -= 3; /* Accounting for top title and bottom margin */
-	cols -= 8; /* Accounting for left line number and right margin */
+	rows -= SECTION_ROW_MARGIN; /* Accounting for top title and bottom margin */
+	/* TODO: This cols decrement is probably inaccurate */
+	cols -= 12; /* Accounting for left line number and right margin */
 
 	TuiAssemblyBuffer assembly = model->buffers.assembly;
 
-	static size_t buffer_start_pos = 0;
-	size_t selected_line = assembly.selected_line;
-
-	if (selected_line < buffer_start_pos) {
-		buffer_start_pos = selected_line;
-	} else if (selected_line + 1 > rows &&
-			   selected_line + 1 > buffer_start_pos + rows) {
-		buffer_start_pos = selected_line + 1 - rows;
-	}
-
 	for (size_t i = 0; i < rows; i++) {
-		const size_t zero_indexed_line_num = buffer_start_pos + i;
+		size_t zero_indexed_line_num = assembly.line_pos + i;
 		if (zero_indexed_line_num >= assembly.line_count)
 			break;
 
@@ -307,13 +314,7 @@ void view_tui(TuiModel *model) {
 		return;
 	}
 
-	/* TODO: Find a nice way to move this side effect out of here or move it to
-	 * a cmd triggered by update */
-	model->term_rows = rows;
-	model->term_cols = rows;
-
 	/* Source */
-	static WINDOW *source_win = NULL;
 	if (!source_win) {
 		source_win = newwin(2 * rows / 3, cols / 2, 0, 0);
 		new_panel(source_win);
@@ -329,10 +330,9 @@ void view_tui(TuiModel *model) {
 	mvwprintw(source_win, 1, 2, "%s", "Source");
 	wattroff(source_win, A_BOLD);
 
-	view_source_buffer(model, source_win);
+	view_source_buffer(model);
 
 	/* Assembly */
-	static WINDOW *assembly_win = NULL;
 	if (!assembly_win) {
 		assembly_win = newwin(2 * rows / 3, cols / 2, 0, cols / 2);
 		new_panel(assembly_win);
@@ -348,10 +348,9 @@ void view_tui(TuiModel *model) {
 	mvwprintw(assembly_win, 1, 2, "%s", "Assembly");
 	wattroff(assembly_win, A_BOLD);
 
-	view_assembly_buffer(model, assembly_win);
+	view_assembly_buffer(model);
 
 	/* Output */
-	static WINDOW *output_win = NULL;
 	if (!output_win) {
 		output_win = newwin(rows / 3, cols / 2, 2 * rows / 3, 0);
 		new_panel(output_win);
@@ -368,7 +367,6 @@ void view_tui(TuiModel *model) {
 	wattroff(output_win, A_BOLD);
 
 	/* Registers */
-	static WINDOW *registers_win = NULL;
 	if (!registers_win) {
 		registers_win = newwin(rows / 3, cols / 2, 2 * rows / 3, cols / 2);
 		new_panel(registers_win);
@@ -385,8 +383,6 @@ void view_tui(TuiModel *model) {
 	wattroff(registers_win, A_BOLD);
 
 	/* Picker */
-	static WINDOW *picker_win = NULL;
-	static PANEL *picker_panel = NULL;
 	if (!picker_win) {
 		picker_win = newwin(rows / 2, cols / 2, rows / 4, cols / 4);
 		picker_panel = new_panel(picker_win);
