@@ -9,6 +9,55 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The caller is responsible for freeing the returned string */
+/* TODO: Put file paths in session struct so we can free these nicely */
+static char *get_file_path(LineNumProgHeader64 *line_prog_header,
+						   size_t file_index) {
+	/* TODO: If the path starts with /build/ then assume it was built with
+	 * nix (do further checks if there is a nice way to check) and replace
+	 * with /nix/store/ */
+	DwarfLineNumContentEntry file_entry =
+		line_prog_header->file_names[file_index];
+
+	const char *file_name = file_entry.path;
+	if (!file_name)
+		return NULL;
+
+	/* Some build systems give the file entry path in absolute form and some
+	 * give a relative path (cmake, nix and plain gcc uses different forms) */
+	if (file_name[0] == '/')
+		return strdup(file_name);
+
+	/* Note that the compilation directory may not necessarily exist during
+	 * runtime, for example when using `nix build`. */
+	const char *directory =
+		line_prog_header->directories[file_entry.directory_index].path;
+	if (!directory)
+		return NULL;
+
+	if (directory[0] == '/') {
+		char *file_path = malloc(strlen(directory) + 1 + strlen(file_name) + 1);
+		char *p = stpcpy(file_path, directory);
+		*p++ = '/';
+		strcpy(p, file_name);
+		return file_path;
+	}
+
+	const char *compilation_dir = line_prog_header->directories[0].path;
+	if (!compilation_dir)
+		return NULL;
+
+	char *file_path = malloc(strlen(compilation_dir) + 1 + strlen(directory) +
+							 1 + strlen(file_name) + 1);
+	char *p = stpcpy(file_path, compilation_dir);
+	*p++ = '/';
+	p = stpcpy(p, directory);
+	*p++ = '/';
+	strcpy(p, file_name);
+
+	return file_path;
+}
+
 /* Call in the parent process. */
 DebugSession *init_debug_session(const char *inferior_path) {
 	DebugSession *debug_session = calloc(1, sizeof(DebugSession));
@@ -41,13 +90,12 @@ LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index) {
 
 	LineInfoCompUnit comp_unit =
 		session->line_info->comp_units[comp_unit_index];
-	const char *file_name = comp_unit.header->file_names[0].path;
+	/* FIX: This is a memory leak and unnecessary duplicate */
+	char *file_name = get_file_path(comp_unit.header, 0);
 
 	FILE *file = fopen(file_name, "r");
 	if (!file) {
 		/* TODO: Handle */
-		/* TODO: Also figure out why sometimes file_name includes the directory
-		 * and sometimes doesn't. */
 	}
 
 	char *line = NULL;
@@ -126,8 +174,8 @@ LinesBuffer *get_file_picker_buffer(DebugSession *session) {
 	buffer->line_count = session->line_info->comp_unit_count;
 
 	for (size_t i = 0; i < session->line_info->comp_unit_count; i++) {
-		const char *file_name =
-			session->line_info->comp_units[i].header->file_names[0].path;
+		char *file_name =
+			get_file_path(session->line_info->comp_units[i].header, 0);
 		buffer->lines[i] = file_name;
 	}
 
