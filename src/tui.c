@@ -1,4 +1,6 @@
 #include "tui.h"
+#include "debug.h"
+#include "dwarf.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -22,8 +24,10 @@
 /* The top line, section title and bottom line occupy 3 rows per section */
 #define SECTION_ROW_MARGIN 3
 
-#define INACTIVE_COLOR 0
+#define DEFAULT_COLOR 0
 #define ACTIVE_COLOR 1
+#define INACTIVE_COLOR 2
+#define SECONDARY_COLOR 3
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -59,8 +63,10 @@ void open_tui() {
 
 	if (has_colors()) {
 		start_color();
-		init_pair(INACTIVE_COLOR, COLOR_WHITE, COLOR_BLACK);
+		init_pair(DEFAULT_COLOR, COLOR_WHITE, COLOR_BLACK);
 		init_pair(ACTIVE_COLOR, COLOR_GREEN, COLOR_BLACK);
+		init_pair(INACTIVE_COLOR, COLOR_BLUE, COLOR_BLACK);
+		init_pair(SECONDARY_COLOR, COLOR_MAGENTA, COLOR_BLACK);
 	}
 }
 
@@ -87,6 +93,8 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 		tui_buffer_rows = (unsigned)getmaxy(picker_win) - SECTION_ROW_MARGIN;
 	}
 
+	size_t initial_selected_line = tui_buffer->selected_line;
+
 	switch (msg.type) {
 	case MSG_BUFFER_MOTION:
 		if (!tui_buffer || tui_buffer->line_count == 0)
@@ -102,7 +110,6 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 		unsigned long line_distance = 0;
 
 		if (msg.value.motion.amount.relative == BUFFER_HALF) {
-			/* TODO */
 			line_distance = tui_buffer_rows / 2;
 		} else if (msg.value.motion.amount.relative == BUFFER_FULL) {
 			line_distance = tui_buffer_rows;
@@ -135,6 +142,18 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 				tui_buffer->selected_line + 1 - tui_buffer_rows;
 		}
 
+		if (model->focused_win == WIN_SOURCE &&
+			initial_selected_line != tui_buffer->selected_line) {
+			if (model->selected_line_instructions) {
+				free(model->selected_line_instructions->instructions);
+				free(model->selected_line_instructions);
+			}
+
+			model->selected_line_instructions = get_instructions_for_line(
+				model->session, model->selected_comp_unit_index,
+				tui_buffer->selected_line + 1);
+		}
+
 		break;
 	case MSG_GO_TO_BUFFER_LINE:
 		if (!tui_buffer)
@@ -157,6 +176,16 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 					   tui_buffer->line_pos + tui_buffer_rows) {
 			tui_buffer->line_pos =
 				tui_buffer->selected_line + 1 - tui_buffer_rows;
+		}
+
+		if (model->focused_win == WIN_SOURCE &&
+			initial_selected_line != tui_buffer->selected_line) {
+			if (model->selected_line_instructions)
+				free(model->selected_line_instructions);
+
+			model->selected_line_instructions = get_instructions_for_line(
+				model->session, model->selected_comp_unit_index,
+				tui_buffer->selected_line + 1);
 		}
 
 		break;
@@ -182,6 +211,9 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 	case MSG_CONFIRM:
 		cmd.type = CMD_SELECT_COMP_UNIT;
 		cmd.value.comp_unit_index = model->buffers.picker.selected_line;
+		/* TODO: Need to figure out how to handle selected buffers/comp units
+		 * during execution */
+		model->selected_comp_unit_index = model->buffers.picker.selected_line;
 		break;
 	case MSG_SHOW_PICKER:
 		model->is_picker_open = msg.value.is_open;
@@ -249,10 +281,12 @@ static void view_source_buffer(TuiModel *model) {
 				line[c] = ' ';
 		}
 
+		/* TODO: Change highlight colour to INACTIVE_COLOR (redefine current
+		 * INACTIVE to DEFAULT) if this is not the focused window  */
 		bool is_selected_line = zero_indexed_line_num == source.selected_line;
 		attr_t line_attrs =
 			A_NORMAL | (is_selected_line ? A_STANDOUT | COLOR_PAIR(ACTIVE_COLOR)
-										 : COLOR_PAIR(INACTIVE_COLOR));
+										 : COLOR_PAIR(DEFAULT_COLOR));
 
 		/* TODO: Line wrapping instead of truncation */
 		wattron(source_win, line_attrs);
@@ -285,10 +319,47 @@ static void view_assembly_buffer(TuiModel *model) {
 		char *line =
 			strdup(assembly.buffer->text_buffer->lines[zero_indexed_line_num]);
 
-		bool is_selected_line = zero_indexed_line_num == assembly.selected_line;
-		attr_t line_attrs =
-			A_NORMAL | (is_selected_line ? A_STANDOUT | COLOR_PAIR(ACTIVE_COLOR)
-										 : COLOR_PAIR(INACTIVE_COLOR));
+		size_t address = assembly.buffer->addresses[zero_indexed_line_num];
+		LineInfoEntry *line_entry = NULL;
+
+		LineInstructions *selected_instructions =
+			model->selected_line_instructions;
+		if (selected_instructions &&
+			selected_instructions->instruction_count > 0) {
+			size_t lower_index = 0;
+			size_t upper_index = selected_instructions->instruction_count - 1;
+
+			while (lower_index <= upper_index) {
+				size_t index = lower_index + (upper_index - lower_index) / 2;
+				LineInfoEntry *element =
+					&selected_instructions->instructions[index];
+				if (element->address == address) {
+					line_entry = element;
+					break;
+				} else if (element->address < address) {
+					lower_index = index + 1;
+				} else {
+					if (index == 0)
+						break;
+					upper_index = index - 1;
+				}
+			}
+		}
+
+		/* TODO: Change highlight colour to INACTIVE_COLOR (redefine current
+		 * INACTIVE to DEFAULT) if this is not the focused window  */
+		attr_t line_attrs;
+		if (zero_indexed_line_num == assembly.selected_line) {
+			line_attrs =
+				A_STANDOUT |
+				COLOR_PAIR(model->focused_win == WIN_ASSEMBLY ? ACTIVE_COLOR
+															  : INACTIVE_COLOR);
+		} else if (line_entry) {
+			line_attrs = (line_entry->is_stmt ? A_UNDERLINE : A_NORMAL) |
+						 COLOR_PAIR(SECONDARY_COLOR);
+		} else {
+			line_attrs = A_NORMAL | COLOR_PAIR(DEFAULT_COLOR);
+		}
 
 		/* TODO: Line wrapping instead of truncation */
 		wattron(assembly_win, line_attrs);

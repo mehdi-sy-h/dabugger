@@ -80,6 +80,7 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 			current_msg = none_msg;
 		}
 
+		/* TODO: Allow quitting picker with esc */
 		if (current_msg.type == MSG_NONE) {
 			get_input_key(&input);
 

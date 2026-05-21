@@ -90,7 +90,6 @@ LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index) {
 
 	LineInfoCompUnit comp_unit =
 		session->line_info->comp_units[comp_unit_index];
-	/* FIX: This is a memory leak and unnecessary duplicate */
 	char *file_name = get_file_path(comp_unit.header, 0);
 
 	FILE *file = fopen(file_name, "r");
@@ -114,6 +113,7 @@ LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index) {
 	}
 
 	fclose(file);
+	free(file_name);
 
 	return buffer;
 }
@@ -188,4 +188,40 @@ void free_lines_buffer(LinesBuffer *buffer) {
 	}
 	free(buffer->lines);
 	free(buffer);
+}
+
+/* Get the VMAs associated with the (1-indexed) line number.
+ * The caller is responsible for freeing the returned buffer. */
+LineInstructions *get_instructions_for_line(DebugSession *session,
+											size_t comp_unit_index,
+											size_t line_num) {
+	assert(line_num != 0);
+
+	LineInstructions *line_instructions = calloc(1, sizeof(LineInstructions));
+	LineInfoCompUnit comp_unit =
+		session->line_info->comp_units[comp_unit_index];
+
+	/* While addresses in the line info table are guaranteed to be increasing,
+	 * the same is not necessarily true for line numbers, so we unfortunately
+	 * have to linear search. However, we at least know that successive
+	 * insertions into line_addresses will be increasing. */
+	/* TODO: Consider memoizing the addresses in get_source_buffer() */
+	for (size_t i = 0; i < comp_unit.table->sequences_count; i++) {
+		LineInfoSequence sequence = comp_unit.table->sequences[i];
+		for (size_t j = 0; j < sequence.entry_count; j++) {
+			LineInfoEntry entry = sequence.entries[j];
+			if (entry.line == line_num) {
+				line_instructions->instruction_count += 1;
+				line_instructions->instructions =
+					reallocarray(line_instructions->instructions,
+								 line_instructions->instruction_count,
+								 sizeof(LineInfoEntry));
+				line_instructions
+					->instructions[line_instructions->instruction_count - 1] =
+					entry;
+			}
+		}
+	}
+
+	return line_instructions;
 }

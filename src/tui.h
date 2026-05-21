@@ -89,6 +89,13 @@ typedef struct {
 	size_t selected_line;
 	size_t line_count;
 	size_t line_pos;
+	void *buffer;
+} TuiBuffer;
+
+typedef struct {
+	size_t selected_line;
+	size_t line_count;
+	size_t line_pos;
 	LinesBuffer *buffer;
 } TuiLinesBuffer;
 
@@ -100,19 +107,14 @@ typedef struct {
 } TuiAssemblyBuffer;
 
 typedef struct {
-	size_t selected_line;
-	size_t line_count;
-	size_t line_pos;
-	void *buffer;
-} TuiBuffer;
-
-typedef struct {
 	struct {
 		TuiLinesBuffer source;
 		TuiAssemblyBuffer assembly;
 		TuiLinesBuffer picker;
 	} buffers;
 	DebugSession *session;
+	LineInstructions *selected_line_instructions;
+	size_t selected_comp_unit_index;
 	TuiWindow focused_win;
 	bool is_picker_open;
 } TuiModel;
