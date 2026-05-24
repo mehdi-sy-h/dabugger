@@ -11,11 +11,13 @@
 #include <string.h>
 
 /* TODO: Define and use this and pass it around static functions in dwarf.c */
+/*
 typedef struct {
 } DwarfLineCU;
 
 typedef struct {
 } DwarfLineContext;
+*/
 
 static void read_lnct_path(BinaryReader *debug_line_reader,
 						   SectionBuffer *debug_line_str_buffer,
@@ -334,13 +336,13 @@ static void free_line_header64(LineNumProgHeader64 *header) {
 }
 */
 
-/* Successive insertions must be monotonically increasing in the
- * operation pointer (i.e. address for non-VLIW architectures). */
+/* Successive insertions into the same sequence must be monotonically increasing
+ * in the operation pointer (i.e. address for non-VLIW architectures). */
 static void append_line_info_entry(LineInfoTable *line_info_table,
 								   LineNumStateMachine *state_machine) {
 	LineInfoSequence *sequence = NULL;
 
-	if (state_machine->end_sequence || line_info_table->sequences_count == 0) {
+	if (line_info_table->sequences_count == 0) {
 		line_info_table->sequences_count += 1;
 		line_info_table->sequences = reallocarray(
 			line_info_table->sequences, line_info_table->sequences_count,
@@ -381,6 +383,18 @@ static void append_line_info_entry(LineInfoTable *line_info_table,
 	entry->basic_block = state_machine->basic_block;
 	entry->prologue_end = state_machine->prologue_end;
 	entry->epilogue_begin = state_machine->epilogue_begin;
+
+	if (state_machine->end_sequence) {
+		line_info_table->sequences_count += 1;
+		line_info_table->sequences = reallocarray(
+			line_info_table->sequences, line_info_table->sequences_count,
+			sizeof(LineInfoSequence));
+
+		LineInfoSequence *new_sequence =
+			&line_info_table->sequences[line_info_table->sequences_count - 1];
+		new_sequence->entry_count = 0;
+		new_sequence->entries = NULL;
+	}
 }
 
 /* See DWARF 5 Specification Table 6.4 for initial values */
@@ -499,7 +513,8 @@ static LineInfoTable decode_line_num_prog(LineNumProgHeader64 *header,
 			case DW_LNS_advance_line:
 				/* TODO: Handle read error */
 				read_sleb128(debug_line_reader, &line_increment);
-				state_machine.line += line_increment;
+				state_machine.line =
+					(uint32_t)((int64_t)state_machine.line + line_increment);
 				break;
 			case DW_LNS_set_file:
 				/* TODO: Handle read error */
