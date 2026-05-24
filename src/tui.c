@@ -98,12 +98,13 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 		tui_buffer_rows = (unsigned)getmaxy(picker_win) - SECTION_ROW_MARGIN;
 	}
 
-	size_t initial_selected_line = tui_buffer->selected_line;
+	size_t initial_selected_line;
 
 	switch (msg.type) {
 	case MSG_BUFFER_MOTION:
 		if (!tui_buffer || tui_buffer->line_count == 0)
 			break;
+		initial_selected_line = tui_buffer->selected_line;
 
 		/* This should only be the case for MSG_GO_TO_BUFFER_LINE */
 		assert(msg.value.motion.amount.relative != BUFFER_START);
@@ -162,6 +163,7 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 	case MSG_GO_TO_BUFFER_LINE:
 		if (!tui_buffer)
 			break;
+		initial_selected_line = tui_buffer->selected_line;
 
 		if (msg.value.motion.amount.relative == BUFFER_END) {
 			tui_buffer->selected_line = tui_buffer->line_count - 1;
