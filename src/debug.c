@@ -234,6 +234,11 @@ LineInstructions *get_instructions_for_line(DebugSession *session,
 	return line_instructions;
 }
 
+void free_line_instructions(LineInstructions *line_instructions) {
+	free(line_instructions->instructions);
+	free(line_instructions);
+}
+
 /* Returns true on success, false otherwise */
 bool set_breakpoint(DebugSession *session, size_t address) {
 	Breakpoints *breakpoint_data = session->breakpoints;
@@ -334,6 +339,8 @@ bool set_source_breakpoint(DebugSession *session, size_t comp_unit_index,
 			break;
 		}
 	}
+
+	free_line_instructions(selected_instructions);
 
 	/* TODO: Maybe try subsequent lines if there is no is_stmt address for the
 	 * requested line. Will require notifying the user so they dont think its a

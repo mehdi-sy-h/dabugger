@@ -138,7 +138,7 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 			}
 		}
 
-		/* Factor the following out of this case and next case */
+		/* TODO: Factor the following out of this case and next case */
 		if (tui_buffer->selected_line < tui_buffer->line_pos) {
 			tui_buffer->line_pos = tui_buffer->selected_line;
 		} else if (tui_buffer->selected_line + 1 > tui_buffer_rows &&
@@ -150,10 +150,8 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 
 		if (model->focused_win == WIN_SOURCE &&
 			initial_selected_line != tui_buffer->selected_line) {
-			if (model->selected_line_instructions) {
-				free(model->selected_line_instructions->instructions);
-				free(model->selected_line_instructions);
-			}
+			if (model->selected_line_instructions)
+				free_line_instructions(model->selected_line_instructions);
 
 			model->selected_line_instructions = get_instructions_for_line(
 				model->session, model->selected_comp_unit_index,
@@ -187,7 +185,7 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 		if (model->focused_win == WIN_SOURCE &&
 			initial_selected_line != tui_buffer->selected_line) {
 			if (model->selected_line_instructions)
-				free(model->selected_line_instructions);
+				free_line_instructions(model->selected_line_instructions);
 
 			model->selected_line_instructions = get_instructions_for_line(
 				model->session, model->selected_comp_unit_index,

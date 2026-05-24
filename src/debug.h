@@ -64,6 +64,8 @@ void free_lines_buffer(LinesBuffer *buffer);
 LineInstructions *get_instructions_for_line(DebugSession *session,
 											size_t comp_unit_index,
 											size_t line_num);
+void free_line_instructions(LineInstructions *line_instructions);
+
 size_t *get_line_segment_for_address(DebugSession *session,
 									 size_t comp_unit_index, size_t vma);
 
