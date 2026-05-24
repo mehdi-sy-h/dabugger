@@ -5,10 +5,34 @@
 #include "elf.h"
 
 typedef struct {
+	size_t address;
+	/* The data that was replaced by INT3 when inserting a breakpoint */
+	uint8_t original_byte;
+} Breakpoint;
+
+typedef struct {
+	size_t breakpoint_count;
+	Breakpoint *breakpoints;
+} Breakpoints;
+
+typedef struct {
+	size_t address;
+	size_t comp_unit_index;
+	size_t line_num;
+} SourceBreakpoint;
+
+typedef struct {
+	size_t src_breakpoint_count;
+	SourceBreakpoint *src_breakpoints;
+} SourceBreakpoints;
+
+typedef struct {
 	const char *inferior_path;
+	int inferior_pid;
 	ProgramData *program_data;
 	LineInfo *line_info;
-	/* TODO: breakpoints */
+	Breakpoints *breakpoints;
+	SourceBreakpoints *src_breakpoints;
 } DebugSession;
 
 typedef struct {
@@ -29,7 +53,7 @@ typedef struct {
 	LineInfoEntry *instructions;
 } LineInstructions;
 
-DebugSession *init_debug_session(const char *inferior_path);
+DebugSession *init_debug_session(const char *inferior_path, int inferior_pid);
 
 LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index);
 AssemblyBuffer *get_assembly_buffer(DebugSession *session,
@@ -42,5 +66,16 @@ LineInstructions *get_instructions_for_line(DebugSession *session,
 											size_t line_num);
 size_t *get_line_segment_for_address(DebugSession *session,
 									 size_t comp_unit_index, size_t vma);
+
+bool set_breakpoint(DebugSession *session, size_t address);
+void remove_breakpoint(DebugSession *session, size_t address);
+void toggle_breakpoint(DebugSession *session, size_t address);
+
+bool set_source_breakpoint(DebugSession *session, size_t comp_unit_index,
+						   size_t line_num);
+void remove_source_breakpoint(DebugSession *session, size_t comp_unit_index,
+							  size_t line_num);
+void toggle_source_breakpoint(DebugSession *session, size_t comp_unit_index,
+							  size_t line_num);
 
 #endif /* DABUGGER_DEBUG_H */

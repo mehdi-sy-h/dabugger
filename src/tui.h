@@ -23,8 +23,9 @@
 #define KEY_CHORD_SWITCH_WIN CTRL('w')
 #define KEY_CHORD_FILE_PICKER CTRL('p')
 #define KEY_CONFIRM '\n'
-#define KEY_SET_BREAKPOINT ' '
-#define KEY_EXECUTE_PROG 'R'
+#define KEY_TOGGLE_BREAKPOINT ' '
+#define KEY_START_PROG 'R'
+#define KEY_STOP_PROG 'F'
 
 typedef enum {
 	MSG_NONE = 0,
@@ -36,11 +37,14 @@ typedef enum {
 	MSG_CHANGE_SECTION,
 	MSG_SET_SOURCE_BUFFER,
 	MSG_SET_ASSEMBLY_BUFFER,
+	MSG_TOGGLE_BREAKPOINT,
 } TuiMsgType;
 
 typedef enum {
 	CMD_NONE = 0,
 	CMD_SELECT_COMP_UNIT,
+	CMD_TOGGLE_BREAKPOINT,
+	CMD_TOGGLE_SOURCE_BREAKPOINT,
 } TuiCmdType;
 
 typedef enum {
@@ -82,6 +86,11 @@ typedef struct {
 	TuiCmdType type;
 	union {
 		size_t comp_unit_index;
+		size_t breakpoint_address;
+		struct {
+			size_t comp_unit_index;
+			size_t line_num;
+		} source_breakpoint_info;
 	} value;
 } TuiCmd;
 

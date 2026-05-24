@@ -45,12 +45,12 @@ static void start_child_process(const char *inferior_path,
 	execv(inferior_path, inferior_args);
 }
 
-static void start_debug_process(int debugger_pid, const char *inferior_path) {
+static void start_debug_process(const char *inferior_path, int inferior_pid) {
 	int status;
-	waitpid(debugger_pid, &status, __WALL);
-	ptrace(PTRACE_SETOPTIONS, debugger_pid, NULL, PTRACE_O_EXITKILL);
+	waitpid(inferior_pid, &status, __WALL);
+	ptrace(PTRACE_SETOPTIONS, inferior_pid, NULL, PTRACE_O_EXITKILL);
 
-	DebugSession *session = init_debug_session(inferior_path);
+	DebugSession *session = init_debug_session(inferior_path, inferior_pid);
 
 	TuiModel model = {.session = session, .is_picker_open = false};
 
@@ -95,6 +95,13 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 			case KEY_CONFIRM:
 				current_msg.type = MSG_CONFIRM;
 				break;
+			case KEY_TOGGLE_BREAKPOINT:
+				current_msg.type = MSG_TOGGLE_BREAKPOINT;
+				break;
+			case KEY_START_PROG:
+				break;
+			case KEY_STOP_PROG:
+				break;
 			case KEY_MOTION_UP:
 			case KEY_MOTION_DOWN:
 			case KEY_MOTION_LEFT:
@@ -129,6 +136,17 @@ static void start_debug_process(int debugger_pid, const char *inferior_path) {
 			enqueue_msg(&msg_queue, hide_picker_msg);
 
 			break;
+		case CMD_TOGGLE_BREAKPOINT:
+			size_t breakpoint_address = current_cmd.value.breakpoint_address;
+			/* TODO: Handle failure case */
+			toggle_breakpoint(session, breakpoint_address);
+			break;
+		case CMD_TOGGLE_SOURCE_BREAKPOINT:
+			toggle_source_breakpoint(
+				session,
+				current_cmd.value.source_breakpoint_info.comp_unit_index,
+				current_cmd.value.source_breakpoint_info.line_num);
+			break;
 		case CMD_NONE:
 			break;
 		}
@@ -151,7 +169,7 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 	if (pid == 0) {
 		start_child_process(inferior_path, inferior_args);
 	} else if (pid > 0) {
-		start_debug_process(pid, inferior_path);
+		start_debug_process(inferior_path, pid);
 	}
 
 	return EXIT_SUCCESS;

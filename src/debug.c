@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ptrace.h>
+
+#define INT3 0xccU
 
 /* The caller is responsible for freeing the returned string */
 /* TODO: Put file paths in session struct so we can free these nicely */
@@ -59,15 +62,18 @@ static char *get_file_path(LineNumProgHeader64 *line_prog_header,
 }
 
 /* Call in the parent process. */
-DebugSession *init_debug_session(const char *inferior_path) {
+DebugSession *init_debug_session(const char *inferior_path, int inferior_pid) {
 	DebugSession *debug_session = calloc(1, sizeof(DebugSession));
 	if (!debug_session) {
 		/* TODO */
 	}
 
+	debug_session->inferior_pid = inferior_pid;
 	debug_session->inferior_path = inferior_path;
 	debug_session->program_data = calloc(1, sizeof(ProgramData));
 	debug_session->line_info = calloc(1, sizeof(LineInfo));
+	debug_session->breakpoints = calloc(1, sizeof(Breakpoints));
+	debug_session->src_breakpoints = calloc(1, sizeof(SourceBreakpoints));
 
 	if (!debug_session->program_data || !debug_session->line_info) {
 		/* TODO */
@@ -136,6 +142,9 @@ AssemblyBuffer *get_assembly_buffer(DebugSession *session,
 
 	for (size_t i = 0; i < comp_unit.table->sequences_count; i++) {
 		const LineInfoSequence *sequence = &comp_unit.table->sequences[i];
+		if (sequence->entry_count == 0)
+			continue;
+
 		size_t start_addr = sequence->entries[0].address;
 		size_t end_addr = sequence->entries[sequence->entry_count - 1].address;
 
@@ -201,15 +210,14 @@ LineInstructions *get_instructions_for_line(DebugSession *session,
 	LineInfoCompUnit comp_unit =
 		session->line_info->comp_units[comp_unit_index];
 
-	/* While addresses in the line info table are guaranteed to be increasing,
-	 * the same is not necessarily true for line numbers, so we unfortunately
-	 * have to linear search. However, we at least know that successive
-	 * insertions into line_addresses will be increasing. */
 	/* TODO: Consider memoizing the addresses in get_source_buffer() */
 	for (size_t i = 0; i < comp_unit.table->sequences_count; i++) {
 		LineInfoSequence sequence = comp_unit.table->sequences[i];
 		for (size_t j = 0; j < sequence.entry_count; j++) {
 			LineInfoEntry entry = sequence.entries[j];
+			if (entry.end_sequence)
+				continue;
+
 			if (entry.line == line_num) {
 				line_instructions->instruction_count += 1;
 				line_instructions->instructions =
@@ -224,4 +232,179 @@ LineInstructions *get_instructions_for_line(DebugSession *session,
 	}
 
 	return line_instructions;
+}
+
+/* Returns true on success, false otherwise */
+bool set_breakpoint(DebugSession *session, size_t address) {
+	Breakpoints *breakpoint_data = session->breakpoints;
+
+	for (size_t i = 0; i < breakpoint_data->breakpoint_count; i++) {
+		if (breakpoint_data->breakpoints[i].address == address)
+			return false;
+	}
+
+	/* TODO: Handle error */
+	uint64_t word =
+		(uint64_t)ptrace(PTRACE_PEEKTEXT, session->inferior_pid, address);
+	uint8_t original_byte = word & 0xffU;
+	uint64_t breakpoint_word = (word & ~0xffULL) | INT3;
+
+	Breakpoint breakpoint = {.address = address,
+							 .original_byte = original_byte};
+
+	breakpoint_data->breakpoint_count += 1;
+	breakpoint_data->breakpoints =
+		reallocarray(breakpoint_data->breakpoints,
+					 breakpoint_data->breakpoint_count, sizeof(Breakpoint));
+	breakpoint_data->breakpoints[breakpoint_data->breakpoint_count - 1] =
+		breakpoint;
+
+	ptrace(PTRACE_POKETEXT, session->inferior_pid, breakpoint.address,
+		   breakpoint_word);
+
+	return true;
+}
+
+void remove_breakpoint(DebugSession *session, size_t address) {
+	Breakpoints *breakpoint_data = session->breakpoints;
+
+	for (size_t i = 0; i < breakpoint_data->breakpoint_count; i++) {
+		if (breakpoint_data->breakpoints[i].address == address) {
+			for (size_t j = i; j < breakpoint_data->breakpoint_count - 1; j++) {
+				breakpoint_data->breakpoints[j] =
+					breakpoint_data->breakpoints[j + 1];
+			}
+			breakpoint_data->breakpoint_count -= 1;
+			breakpoint_data->breakpoints = reallocarray(
+				breakpoint_data->breakpoints, breakpoint_data->breakpoint_count,
+				sizeof(Breakpoint));
+			break;
+		}
+	}
+
+	/* TODO: Maybe update source breakpoints too just in case to prevent state
+	 * bug */
+	SourceBreakpoints *src_breakpoint_data = session->src_breakpoints;
+
+	for (size_t i = 0; i < src_breakpoint_data->src_breakpoint_count; i++) {
+		SourceBreakpoint src_breakpoint =
+			src_breakpoint_data->src_breakpoints[i];
+
+		if (src_breakpoint.address == address)
+			remove_source_breakpoint(session, src_breakpoint.comp_unit_index,
+									 src_breakpoint.line_num);
+	}
+}
+
+void toggle_breakpoint(DebugSession *session, size_t address) {
+	Breakpoints *breakpoint_data = session->breakpoints;
+	for (size_t i = 0; i < breakpoint_data->breakpoint_count; i++) {
+		if (breakpoint_data->breakpoints[i].address == address) {
+			remove_breakpoint(session, address);
+			return;
+		}
+	}
+	set_breakpoint(session, address);
+}
+
+bool set_source_breakpoint(DebugSession *session, size_t comp_unit_index,
+						   size_t line_num) {
+	SourceBreakpoints *src_breakpoint_data = session->src_breakpoints;
+
+	for (size_t i = 0; i < src_breakpoint_data->src_breakpoint_count; i++) {
+		SourceBreakpoint src_breakpoint =
+			src_breakpoint_data->src_breakpoints[i];
+
+		if (src_breakpoint.comp_unit_index == comp_unit_index &&
+			src_breakpoint.line_num == line_num)
+			return false;
+	}
+
+	LineInstructions *selected_instructions =
+		get_instructions_for_line(session, comp_unit_index, line_num);
+
+	bool found_address = false;
+	size_t address = 0;
+
+	for (size_t i = 0; i < selected_instructions->instruction_count; i++) {
+		LineInfoEntry entry = selected_instructions->instructions[i];
+		if (entry.is_stmt) {
+			found_address = true;
+			address = entry.address;
+			break;
+		}
+	}
+
+	/* TODO: Maybe try subsequent lines if there is no is_stmt address for the
+	 * requested line. Will require notifying the user so they dont think its a
+	 * bug. */
+	if (!found_address)
+		return false;
+
+	/* FIX: Since set_breakpoint fails if there is more than one breakpoint for
+	 * a given address, the user cannot set a source breakpoint and a normal
+	 * breakpoint which correspond to the same address, at the same time. */
+	bool is_breakpoint_set = set_breakpoint(session, address);
+	if (is_breakpoint_set) {
+		SourceBreakpoint src_breakpoint = {.address = address,
+										   .comp_unit_index = comp_unit_index,
+										   .line_num = line_num};
+
+		src_breakpoint_data->src_breakpoint_count += 1;
+		src_breakpoint_data->src_breakpoints =
+			reallocarray(src_breakpoint_data->src_breakpoints,
+						 src_breakpoint_data->src_breakpoint_count,
+						 sizeof(SourceBreakpoint));
+		src_breakpoint_data
+			->src_breakpoints[src_breakpoint_data->src_breakpoint_count - 1] =
+			src_breakpoint;
+	}
+
+	return is_breakpoint_set;
+}
+
+void remove_source_breakpoint(DebugSession *session, size_t comp_unit_index,
+							  size_t line_num) {
+	SourceBreakpoints *src_breakpoint_data = session->src_breakpoints;
+
+	for (size_t i = 0; i < src_breakpoint_data->src_breakpoint_count; i++) {
+		SourceBreakpoint src_breakpoint =
+			src_breakpoint_data->src_breakpoints[i];
+
+		if (src_breakpoint.comp_unit_index == comp_unit_index &&
+			src_breakpoint.line_num == line_num) {
+
+			for (size_t j = i;
+				 j < src_breakpoint_data->src_breakpoint_count - 1; j++) {
+				src_breakpoint_data->src_breakpoints[j] =
+					src_breakpoint_data->src_breakpoints[j + 1];
+			}
+			src_breakpoint_data->src_breakpoint_count -= 1;
+			src_breakpoint_data->src_breakpoints =
+				reallocarray(src_breakpoint_data->src_breakpoints,
+							 src_breakpoint_data->src_breakpoint_count,
+							 sizeof(SourceBreakpoint));
+
+			remove_breakpoint(session, src_breakpoint.address);
+			break;
+		}
+	}
+}
+
+void toggle_source_breakpoint(DebugSession *session, size_t comp_unit_index,
+							  size_t line_num) {
+	SourceBreakpoints *src_breakpoint_data = session->src_breakpoints;
+
+	for (size_t i = 0; i < src_breakpoint_data->src_breakpoint_count; i++) {
+		SourceBreakpoint src_breakpoint =
+			src_breakpoint_data->src_breakpoints[i];
+
+		if (src_breakpoint.comp_unit_index == comp_unit_index &&
+			src_breakpoint.line_num == line_num) {
+			remove_source_breakpoint(session, comp_unit_index, line_num);
+			return;
+		}
+	}
+
+	set_source_breakpoint(session, comp_unit_index, line_num);
 }

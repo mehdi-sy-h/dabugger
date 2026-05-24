@@ -28,6 +28,7 @@
 #define ACTIVE_COLOR 1
 #define INACTIVE_COLOR 2
 #define SECONDARY_COLOR 3
+#define BREAKPOINT_COLOR 4
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -41,6 +42,9 @@
 #define TR_ROUNDED_CORNER_CHAR L"\u256E" /* ╮ */
 #define BL_ROUNDED_CORNER_CHAR L"\u2570" /* ╰ */
 #define BR_ROUNDED_CORNER_CHAR L"\u256F" /* ╯ */
+
+#define BREAKPOINT_GUTTER_MARKER L"\u25CF" /* ● */
+#define IP_GUTTER_MARKER L"\u2192"
 
 static WINDOW *source_win = NULL;
 static WINDOW *assembly_win = NULL;
@@ -67,6 +71,7 @@ void open_tui() {
 		init_pair(ACTIVE_COLOR, COLOR_GREEN, COLOR_BLACK);
 		init_pair(INACTIVE_COLOR, COLOR_BLUE, COLOR_BLACK);
 		init_pair(SECONDARY_COLOR, COLOR_MAGENTA, COLOR_BLACK);
+		init_pair(BREAKPOINT_COLOR, COLOR_RED, COLOR_BLACK);
 	}
 }
 
@@ -133,6 +138,7 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 			}
 		}
 
+		/* Factor the following out of this case and next case */
 		if (tui_buffer->selected_line < tui_buffer->line_pos) {
 			tui_buffer->line_pos = tui_buffer->selected_line;
 		} else if (tui_buffer->selected_line + 1 > tui_buffer_rows &&
@@ -237,6 +243,20 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 		model->buffers.assembly.line_count =
 			msg.value.new_assembly_buffer->text_buffer->line_count;
 		break;
+	case MSG_TOGGLE_BREAKPOINT:
+		if (model->focused_win == WIN_SOURCE) {
+			cmd.type = CMD_TOGGLE_SOURCE_BREAKPOINT;
+			cmd.value.source_breakpoint_info.comp_unit_index =
+				model->selected_comp_unit_index;
+			cmd.value.source_breakpoint_info.line_num =
+				tui_buffer->selected_line + 1;
+		} else if (model->focused_win == WIN_ASSEMBLY) {
+			cmd.type = CMD_TOGGLE_BREAKPOINT;
+			cmd.value.breakpoint_address =
+				model->buffers.assembly.buffer
+					->addresses[model->buffers.assembly.selected_line];
+		}
+		break;
 	case MSG_QUIT:
 	case MSG_NONE:
 		break;
@@ -265,6 +285,7 @@ static void view_source_buffer(TuiModel *model) {
 	cols -= 8; /* Accounting for left line number and right margin */
 
 	TuiLinesBuffer source = model->buffers.source;
+	SourceBreakpoints *src_breakpoint_data = model->session->src_breakpoints;
 
 	for (size_t i = 0; i < rows; i++) {
 		size_t zero_indexed_line_num = source.line_pos + i;
@@ -281,17 +302,44 @@ static void view_source_buffer(TuiModel *model) {
 				line[c] = ' ';
 		}
 
-		/* TODO: Change highlight colour to INACTIVE_COLOR (redefine current
-		 * INACTIVE to DEFAULT) if this is not the focused window  */
-		bool is_selected_line = zero_indexed_line_num == source.selected_line;
-		attr_t line_attrs =
-			A_NORMAL | (is_selected_line ? A_STANDOUT | COLOR_PAIR(ACTIVE_COLOR)
-										 : COLOR_PAIR(DEFAULT_COLOR));
+		attr_t line_attrs = A_NORMAL;
+		if (zero_indexed_line_num == source.selected_line) {
+			line_attrs =
+				A_STANDOUT |
+				COLOR_PAIR(model->focused_win == WIN_SOURCE ? ACTIVE_COLOR
+															: INACTIVE_COLOR);
+		} else {
+			line_attrs = A_NORMAL | COLOR_PAIR(DEFAULT_COLOR);
+		}
+
+		bool is_breakpoint = false;
+		attr_t line_num_attrs = line_attrs;
+
+		for (size_t b = 0; b < src_breakpoint_data->src_breakpoint_count; b++) {
+			SourceBreakpoint src_breakpoint =
+				src_breakpoint_data->src_breakpoints[b];
+
+			if (src_breakpoint.comp_unit_index ==
+					model->selected_comp_unit_index &&
+				src_breakpoint.line_num == zero_indexed_line_num + 1) {
+				is_breakpoint = true;
+				line_num_attrs = A_BOLD | COLOR_PAIR(BREAKPOINT_COLOR);
+				break;
+			}
+		}
+
+		bool is_current_instruction = false;
+
+		wattron(source_win, line_num_attrs);
+		mvwprintw(source_win, (int)i + 2, 1, "%4ld", zero_indexed_line_num + 1);
+
+		waddwstr(source_win, is_breakpoint ? BREAKPOINT_GUTTER_MARKER : L" ");
+		waddwstr(source_win, is_current_instruction ? IP_GUTTER_MARKER
+													: VERTICAL_LINE_CHAR);
+		wattroff(source_win, line_num_attrs);
 
 		/* TODO: Line wrapping instead of truncation */
 		wattron(source_win, line_attrs);
-		mvwprintw(source_win, (int)i + 2, 1, "%4ld", zero_indexed_line_num + 1);
-		waddwstr(source_win, VERTICAL_LINE_CHAR);
 		wprintw(source_win, " %.*s", cols, line);
 		wattroff(source_win, line_attrs);
 
@@ -308,6 +356,7 @@ static void view_assembly_buffer(TuiModel *model) {
 	cols -= 12; /* Accounting for left line number and right margin */
 
 	TuiAssemblyBuffer assembly = model->buffers.assembly;
+	Breakpoints *breakpoint_data = model->session->breakpoints;
 
 	for (size_t i = 0; i < rows; i++) {
 		size_t zero_indexed_line_num = assembly.line_pos + i;
@@ -322,33 +371,24 @@ static void view_assembly_buffer(TuiModel *model) {
 		size_t address = assembly.buffer->addresses[zero_indexed_line_num];
 		LineInfoEntry *line_entry = NULL;
 
+		/* TODO: Maybe put this in debug.c or dwarf.c */
 		LineInstructions *selected_instructions =
 			model->selected_line_instructions;
-		if (selected_instructions &&
-			selected_instructions->instruction_count > 0) {
-			size_t lower_index = 0;
-			size_t upper_index = selected_instructions->instruction_count - 1;
 
-			while (lower_index <= upper_index) {
-				size_t index = lower_index + (upper_index - lower_index) / 2;
+		if (selected_instructions) {
+			for (size_t entry_index = 0;
+				 entry_index < selected_instructions->instruction_count;
+				 entry_index++) {
 				LineInfoEntry *element =
-					&selected_instructions->instructions[index];
+					&selected_instructions->instructions[entry_index];
 				if (element->address == address) {
 					line_entry = element;
 					break;
-				} else if (element->address < address) {
-					lower_index = index + 1;
-				} else {
-					if (index == 0)
-						break;
-					upper_index = index - 1;
 				}
 			}
 		}
 
-		/* TODO: Change highlight colour to INACTIVE_COLOR (redefine current
-		 * INACTIVE to DEFAULT) if this is not the focused window  */
-		attr_t line_attrs;
+		attr_t line_attrs = A_NORMAL;
 		if (zero_indexed_line_num == assembly.selected_line) {
 			line_attrs =
 				A_STANDOUT |
@@ -361,12 +401,31 @@ static void view_assembly_buffer(TuiModel *model) {
 			line_attrs = A_NORMAL | COLOR_PAIR(DEFAULT_COLOR);
 		}
 
+		/* TODO: We assume the breakpoint array will be small, but do this
+		 * better (i.e. outside and after the loop) later on. */
+		bool is_breakpoint = false;
+		attr_t line_num_attrs = line_attrs;
+
+		for (size_t b = 0; b < breakpoint_data->breakpoint_count; b++) {
+			if (breakpoint_data->breakpoints[b].address == address) {
+				is_breakpoint = true;
+				line_num_attrs = A_BOLD | COLOR_PAIR(BREAKPOINT_COLOR);
+				break;
+			}
+		}
+
+		bool is_current_instruction = false;
+
+		wattron(assembly_win, line_num_attrs);
+		mvwprintw(assembly_win, (int)i + 2, 1, "%4ld %16lx",
+				  zero_indexed_line_num + 1, address);
+		waddwstr(assembly_win, is_breakpoint ? BREAKPOINT_GUTTER_MARKER : L" ");
+		waddwstr(assembly_win, is_current_instruction ? IP_GUTTER_MARKER
+													  : VERTICAL_LINE_CHAR);
+		wattroff(assembly_win, line_num_attrs);
+
 		/* TODO: Line wrapping instead of truncation */
 		wattron(assembly_win, line_attrs);
-		mvwprintw(assembly_win, (int)i + 2, 1, "%4ld %16lx",
-				  zero_indexed_line_num + 1,
-				  assembly.buffer->addresses[zero_indexed_line_num]);
-		waddwstr(assembly_win, VERTICAL_LINE_CHAR);
 		wprintw(assembly_win, " %.*s", cols, line);
 		wattroff(assembly_win, line_attrs);
 
