@@ -38,6 +38,7 @@ typedef enum {
 	MSG_SET_SOURCE_BUFFER,
 	MSG_SET_ASSEMBLY_BUFFER,
 	MSG_TOGGLE_BREAKPOINT,
+	MSG_OUTPUT_UPDATE,
 } TuiMsgType;
 
 typedef enum {

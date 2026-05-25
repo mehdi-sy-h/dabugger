@@ -5,10 +5,14 @@
 #include <Zycore/Types.h>
 #include <Zydis/Disassembler.h>
 #include <Zydis/SharedTypes.h>
+#include <pty.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/personality.h>
 #include <sys/ptrace.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define INT3 0xccU
 
@@ -61,15 +65,15 @@ static char *get_file_path(LineNumProgHeader64 *line_prog_header,
 	return file_path;
 }
 
-/* Call in the parent process. */
-DebugSession *init_debug_session(const char *inferior_path, int inferior_pid) {
+DebugSession *init_debug_session(const char *inferior_path,
+								 char **inferior_args) {
 	DebugSession *debug_session = calloc(1, sizeof(DebugSession));
 	if (!debug_session) {
 		/* TODO */
 	}
 
-	debug_session->inferior_pid = inferior_pid;
 	debug_session->inferior_path = inferior_path;
+	debug_session->inferior_args = inferior_args;
 	debug_session->program_data = calloc(1, sizeof(ProgramData));
 	debug_session->line_info = calloc(1, sizeof(LineInfo));
 	debug_session->breakpoints = calloc(1, sizeof(Breakpoints));
@@ -84,6 +88,28 @@ DebugSession *init_debug_session(const char *inferior_path, int inferior_pid) {
 		parse_debug_line_section(debug_session->program_data->sections);
 
 	return debug_session;
+}
+
+void spawn_inferior(DebugSession *session) {
+	/* TODO: Reap old child process */
+	assert(session->state == DEBUG_DEAD);
+
+	pid_t pid = forkpty(&session->inferior_master_fd, NULL, NULL, NULL);
+	if (pid == 0) {
+		ptrace(PTRACE_TRACEME);
+		/* TODO: Read load address in /proc/pid/maps to support PIE and ASLR. */
+		personality(ADDR_NO_RANDOMIZE);
+		execv(session->inferior_path, session->inferior_args);
+	} else {
+		/* TODO */
+		session->inferior_pid = pid;
+
+		int status;
+		waitpid(pid, &status, __WALL);
+
+		ptrace(PTRACE_SETOPTIONS, session->inferior_pid, NULL,
+			   PTRACE_O_EXITKILL);
+	}
 }
 
 /* The caller is responsible for freeing the returned buffer */

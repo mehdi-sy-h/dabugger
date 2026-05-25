@@ -26,13 +26,22 @@ typedef struct {
 	SourceBreakpoint *src_breakpoints;
 } SourceBreakpoints;
 
+typedef enum {
+	DEBUG_DEAD,
+	DEBUG_RUNNING,
+	DEBUG_BREAKPOINT,
+} DebugState;
+
 typedef struct {
 	const char *inferior_path;
-	int inferior_pid;
+	char **inferior_args;
 	ProgramData *program_data;
 	LineInfo *line_info;
 	Breakpoints *breakpoints;
 	SourceBreakpoints *src_breakpoints;
+	DebugState state;
+	int inferior_pid;
+	int inferior_master_fd;
 } DebugSession;
 
 typedef struct {
@@ -53,7 +62,10 @@ typedef struct {
 	LineInfoEntry *instructions;
 } LineInstructions;
 
-DebugSession *init_debug_session(const char *inferior_path, int inferior_pid);
+DebugSession *init_debug_session(const char *inferior_path, char **inferior_args);
+
+void spawn_inferior(DebugSession *session);
+void stop_inferior(DebugSession *session);
 
 LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index);
 AssemblyBuffer *get_assembly_buffer(DebugSession *session,
