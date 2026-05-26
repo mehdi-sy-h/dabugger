@@ -169,7 +169,9 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 	while (current_msg.type != MSG_QUIT) {
 		view_tui(&model);
 
-		current_msg = dequeue_msg(&msg_queue);
+		do {
+			current_msg = dequeue_msg(&msg_queue);
+		} while (msg_queue.count > 0 && current_msg.type == MSG_NONE);
 
 		if (current_msg.type == MSG_NONE) {
 			poll_fds[POLL_FD_INFERIOR_MASTER].fd = session->inferior_master_fd;
@@ -184,12 +186,11 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 					enqueue_msg(&msg_queue, on_stdin_input(&model));
 					break;
 				case POLL_FD_SIGNAL_CHILD:
-					/*enqueue_msg(&msg_queue,
-								on_signal_child(session, signal_child_fd));*/
+					enqueue_msg(&msg_queue,
+								on_signal_child(session, signal_child_fd));
 					break;
 				case POLL_FD_INFERIOR_MASTER:
-					/*enqueue_msg(&msg_queue,
-					 * on_inferior_pty_update(session));*/
+					enqueue_msg(&msg_queue, on_inferior_pty_update(session));
 					break;
 				}
 			}
