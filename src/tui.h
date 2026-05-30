@@ -59,7 +59,7 @@ typedef enum {
 typedef struct {
 	enum Direction { DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT } direction;
 	union {
-		enum {
+		enum : long {
 			/* Used with MSG_BUFFER_MOTION  */
 			BUFFER_HALF = -3, /* Negative values so its possible to distinguish
 								 from absolute */
@@ -69,7 +69,7 @@ typedef struct {
 			BUFFER_START = -1,
 			BUFFER_END = 0, /* Needs to be 0 to coincide with absolute = 0 */
 		} relative;
-		unsigned long absolute;
+		long absolute;
 	} amount;
 } TuiMotion;
 
