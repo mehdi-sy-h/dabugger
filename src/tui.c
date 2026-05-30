@@ -43,7 +43,7 @@
 #define BL_ROUNDED_CORNER_CHAR L"\u2570" /* ╰ */
 #define BR_ROUNDED_CORNER_CHAR L"\u256F" /* ╯ */
 
-#define BREAKPOINT_GUTTER_MARKER L"\u25CF" /* ● */
+#define BREAKPOINT_GUTTER_MARKER L"\u2022" /* • */
 #define IP_GUTTER_MARKER L"\u2192"
 
 static WINDOW *source_win = NULL;
@@ -257,6 +257,12 @@ TuiCmd update_tui(TuiMsg msg, TuiModel *model) {
 					->addresses[model->buffers.assembly.selected_line];
 		}
 		break;
+	case MSG_OUTPUT_UPDATE:
+		/* TODO: Add output LinesBuffer to model? */
+		break;
+	case MSG_RUN_DEBUGGEE:
+		cmd.type = CMD_RUN_DEBUGGEE;
+		break;
 	case MSG_QUIT:
 	case MSG_NONE:
 		break;
@@ -433,6 +439,23 @@ static void view_assembly_buffer(TuiModel *model) {
 	}
 }
 
+static void view_output_buffer(TuiModel *model) {
+	/* TODO: Clean this up */
+	OutputBuffer *output = &model->session->output;
+	long length = output->cursor - output->buffer + 1;
+	int row = 2;
+	wmove(output_win, row, 2);
+	/* TODO: New line before hitting right border */
+	for (unsigned i = 0; i < length; i++) {
+		char c = output->buffer[i];
+		if (c == '\n')
+			wmove(output_win, ++row, 2);
+		if (!isprint(c))
+			continue;
+		waddch(output_win, c);
+	}
+}
+
 void view_tui(TuiModel *model) {
 	unsigned rows, cols;
 	getmaxyx(stdscr, rows, cols);
@@ -444,6 +467,7 @@ void view_tui(TuiModel *model) {
 		return;
 	}
 
+	/* TODO: Call all view_* functions before drawing the border and title */
 	/* Source */
 	if (!source_win) {
 		source_win = newwin(2 * rows / 3, cols / 2, 0, 0);
@@ -491,6 +515,7 @@ void view_tui(TuiModel *model) {
 		mvwin(output_win, 2 * rows / 3, 0);
 		wresize(output_win, rows / 3, cols / 2);
 	}
+	view_output_buffer(model);
 	set_win_border(output_win, A_NORMAL, 0);
 	wattron(output_win, A_BOLD);
 	mvwprintw(output_win, 1, 2, "%s", "Output");

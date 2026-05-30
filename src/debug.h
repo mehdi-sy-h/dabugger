@@ -4,6 +4,10 @@
 #include "dwarf.h"
 #include "elf.h"
 
+#include <sys/types.h>
+
+#define MAX_OUTPUT_SIZE 1024
+
 typedef struct {
 	size_t address;
 	/* The data that was replaced by INT3 when inserting a breakpoint */
@@ -33,6 +37,12 @@ typedef enum {
 } DebugState;
 
 typedef struct {
+	char buffer[MAX_OUTPUT_SIZE];
+	char *cursor;
+} OutputBuffer;
+
+typedef struct {
+	OutputBuffer output;
 	const char *inferior_path;
 	char **inferior_args;
 	ProgramData *program_data;
@@ -40,7 +50,7 @@ typedef struct {
 	Breakpoints *breakpoints;
 	SourceBreakpoints *src_breakpoints;
 	DebugState state;
-	int inferior_pid;
+	pid_t inferior_pid;
 	int inferior_master_fd;
 } DebugSession;
 
@@ -62,10 +72,15 @@ typedef struct {
 	LineInfoEntry *instructions;
 } LineInstructions;
 
-DebugSession *init_debug_session(const char *inferior_path, char **inferior_args);
+DebugSession *init_debug_session(const char *inferior_path,
+								 char **inferior_args);
 
 void spawn_inferior(DebugSession *session);
+void continue_inferior(DebugSession *session);
 void stop_inferior(DebugSession *session);
+
+void handle_inferior_signal(DebugSession *session, int signal_child_fd);
+void read_inferior_output(DebugSession *session);
 
 LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index);
 AssemblyBuffer *get_assembly_buffer(DebugSession *session,
@@ -81,7 +96,7 @@ void free_line_instructions(LineInstructions *line_instructions);
 size_t *get_line_segment_for_address(DebugSession *session,
 									 size_t comp_unit_index, size_t vma);
 
-bool set_breakpoint(DebugSession *session, size_t address);
+bool add_breakpoint(DebugSession *session, size_t address);
 void remove_breakpoint(DebugSession *session, size_t address);
 void toggle_breakpoint(DebugSession *session, size_t address);
 

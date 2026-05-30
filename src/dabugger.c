@@ -1,14 +1,9 @@
 #include "debug.h"
 #include "tui.h"
 
-#include <assert.h>
 #include <poll.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/personality.h>
-#include <sys/poll.h>
-#include <sys/ptrace.h>
 #include <sys/signalfd.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -50,13 +45,16 @@ static TuiMsg dequeue_msg(TuiMsgQueue *msg_queue) {
 	return msg;
 }
 
-TuiMsg on_stdin_input(TuiModel *model) {
+static TuiMsg on_stdin_input(TuiModel *model) {
 	static InputBuffer input = {0};
 	TuiMsg current_msg = {.type = MSG_NONE};
 
 	get_input_key(&input);
 
 	/* TODO: Allow quitting picker with esc */
+	/* TODO: Pressing enter at the start of the program opens the first
+	 * compilation unit (bug, but a pleasant one, figure out why its happening)
+	 */
 	switch (input.key) {
 	case KEY_QUIT:
 		current_msg.type = MSG_QUIT;
@@ -71,9 +69,16 @@ TuiMsg on_stdin_input(TuiModel *model) {
 	case KEY_TOGGLE_BREAKPOINT:
 		current_msg.type = MSG_TOGGLE_BREAKPOINT;
 		break;
-	case KEY_START_PROG:
+	case KEY_RUN_PROG:
+		current_msg.type = MSG_RUN_DEBUGGEE;
 		break;
 	case KEY_STOP_PROG:
+		break;
+	case KEY_STEP_INSTRUCTION:
+		/* TODO */
+		break;
+	case KEY_STEP_OVER:
+		/* TODO */
 		break;
 	case KEY_MOTION_UP:
 	case KEY_MOTION_DOWN:
@@ -90,37 +95,32 @@ TuiMsg on_stdin_input(TuiModel *model) {
 	return current_msg;
 }
 
-TuiMsg on_signal_child(DebugSession *session, int signal_child_fd) {
+static TuiMsg on_signal_child(DebugSession *session, int signal_child_fd) {
 	TuiMsg current_msg = {.type = MSG_NONE};
-
-	/* See signal(7): Queueing and delivery semantics for standard signals.
-	 * We only need to read one signalfd_siginfo structure from the signal file
-	 * descriptor, and since we don't care about the results (we get the
-	 * information we need from waitpid) we read it into a temporary buffer.
-	 */
-	struct signalfd_siginfo _sig_info;
-	read(signal_child_fd, &_sig_info, sizeof(_sig_info));
-
-	int status;
-
-	/* FIX: Should this be a while loop with the inverse condition instead? */
-	if (waitpid(session->inferior_pid, &status, __WALL | WNOHANG) <= 0)
-		return current_msg;
-
-	/* TODO: Maybe add exit status/signal/stop signal to msg.value */
-	if (WIFEXITED(status)) {
-	} else if (WIFSTOPPED(status)) {
-	} else if (WIFSIGNALED(status)) {
-	} else if (WIFCONTINUED(status)) {
-	}
-
+	/* TODO: Return relevant msg? */
+	handle_inferior_signal(session, signal_child_fd);
 	return current_msg;
 }
 
-TuiMsg on_inferior_pty_update(DebugSession *session) {
-	TuiMsg current_msg = {.type = MSG_NONE};
-
+static TuiMsg on_inferior_pty_update(DebugSession *session) {
+	TuiMsg current_msg = {.type = MSG_OUTPUT_UPDATE};
+	read_inferior_output(session);
 	return current_msg;
+}
+
+static void on_run_inferior(DebugSession *session) {
+	switch (session->state) {
+	case DEBUG_DEAD:
+		/* TODO: Clean previous child process if any */
+		spawn_inferior(session);
+		break;
+	case DEBUG_RUNNING:
+		continue_inferior(session);
+		break;
+	case DEBUG_BREAKPOINT:
+		continue_inferior(session);
+		break;
+	}
 }
 
 int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
@@ -153,9 +153,16 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 	 * the debuggee's output (the file descriptor given by forkpty)
 	 * and signals delivered to the debuggee that we intercept. */
 
+	/* TODO: Handle all error cases below */
+	/* TODO: Use pidfd instead? */
+	/*int child_fd = (int)syscall(SYS_pidfd_open, session->inferior_pid);*/
 	sigset_t mask;
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGCHLD);
+
+	/* Default disposition of SIGCHLD is to ignore so we need to change it */
+	sigprocmask(SIG_BLOCK, &mask, NULL);
+
 	int signal_child_fd = signalfd(-1, &mask, 0);
 
 	struct pollfd poll_fds[] = {
@@ -228,6 +235,9 @@ int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 				session,
 				current_cmd.value.source_breakpoint_info.comp_unit_index,
 				current_cmd.value.source_breakpoint_info.line_num);
+			break;
+		case CMD_RUN_DEBUGGEE:
+			on_run_inferior(session);
 			break;
 		case CMD_NONE:
 			break;

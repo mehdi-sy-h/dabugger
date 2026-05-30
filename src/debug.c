@@ -2,15 +2,14 @@
 #include "dwarf.h"
 #include "elf.h"
 
-#include <Zycore/Types.h>
 #include <Zydis/Disassembler.h>
-#include <Zydis/SharedTypes.h>
 #include <pty.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/personality.h>
 #include <sys/ptrace.h>
+#include <sys/signalfd.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -65,6 +64,63 @@ static char *get_file_path(LineNumProgHeader64 *line_prog_header,
 	return file_path;
 }
 
+/* Sets the breakpoint by inserting an INT3 instruction at address.
+ * Returns the original byte that was replaced by INT3. */
+static uint8_t set_process_breakpoint(pid_t pid, size_t address) {
+	/* TODO: Handle errors */
+	uint64_t word = (uint64_t)ptrace(PTRACE_PEEKTEXT, pid, address);
+	uint8_t original_byte = word & 0xffU;
+	uint64_t breakpoint_word = (word & ~0xffULL) | INT3;
+	ptrace(PTRACE_POKETEXT, pid, address, breakpoint_word);
+	return original_byte;
+}
+
+void spawn_inferior(DebugSession *session) {
+	/* TODO: Reap old child process */
+	assert(session->state == DEBUG_DEAD);
+
+	pid_t pid = forkpty(&session->inferior_master_fd, NULL, NULL, NULL);
+
+	if (pid == 0) {
+		ptrace(PTRACE_TRACEME);
+		/* TODO: Read load address in /proc/pid/maps to support PIE and ASLR. */
+		personality(ADDR_NO_RANDOMIZE);
+		execv(session->inferior_path, session->inferior_args);
+		/* exec() functions only return on error
+		 * Also, we use _exit instead of exit because the debugger process might
+		 * want to read the child's stdio streams, and _exit() does not flush
+		 * them (and doesn't clean up some other resources), but exit() does.
+		 */
+		_exit(EXIT_FAILURE);
+	} else if (pid == -1) {
+		/* TODO: Handle error */
+	}
+
+	session->inferior_pid = pid;
+	session->state = DEBUG_RUNNING;
+
+	int status;
+	waitpid(pid, &status, 0);
+
+	ptrace(PTRACE_SETOPTIONS, session->inferior_pid, NULL, PTRACE_O_EXITKILL);
+
+	/* TODO: Better (more "functional/reactive"?) way to update breakpoints */
+	Breakpoints *breakpoint_data = session->breakpoints;
+
+	for (size_t i = 0; i < breakpoint_data->breakpoint_count; i++) {
+		Breakpoint breakpoint = breakpoint_data->breakpoints[i];
+		set_process_breakpoint(pid, breakpoint.address);
+	}
+}
+
+void continue_inferior(DebugSession *session) {
+	/*assert(session->state == DEBUG_DEAD || session->state ==
+	 * DEBUG_BREAKPOINT);*/
+	ptrace(PTRACE_CONT, session->inferior_pid);
+}
+
+void stop_inferior(DebugSession *session) {}
+
 DebugSession *init_debug_session(const char *inferior_path,
 								 char **inferior_args) {
 	DebugSession *debug_session = calloc(1, sizeof(DebugSession));
@@ -74,10 +130,12 @@ DebugSession *init_debug_session(const char *inferior_path,
 
 	debug_session->inferior_path = inferior_path;
 	debug_session->inferior_args = inferior_args;
+	debug_session->inferior_master_fd = -1;
 	debug_session->program_data = calloc(1, sizeof(ProgramData));
 	debug_session->line_info = calloc(1, sizeof(LineInfo));
 	debug_session->breakpoints = calloc(1, sizeof(Breakpoints));
 	debug_session->src_breakpoints = calloc(1, sizeof(SourceBreakpoints));
+	debug_session->output.cursor = debug_session->output.buffer;
 
 	if (!debug_session->program_data || !debug_session->line_info) {
 		/* TODO */
@@ -90,26 +148,52 @@ DebugSession *init_debug_session(const char *inferior_path,
 	return debug_session;
 }
 
-void spawn_inferior(DebugSession *session) {
-	/* TODO: Reap old child process */
-	assert(session->state == DEBUG_DEAD);
+void handle_inferior_signal(DebugSession *session, int signal_child_fd) {
+	/* See signal(7): Queueing and delivery semantics for standard signals.
+	 * We only need to read one signalfd_siginfo structure from the signal file
+	 * descriptor, and since we don't care about the results (we get the
+	 * information we need from waitpid) we read it into a temporary buffer.
+	 */
+	struct signalfd_siginfo _sig_info;
+	read(signal_child_fd, &_sig_info, sizeof(_sig_info));
 
-	pid_t pid = forkpty(&session->inferior_master_fd, NULL, NULL, NULL);
-	if (pid == 0) {
-		ptrace(PTRACE_TRACEME);
-		/* TODO: Read load address in /proc/pid/maps to support PIE and ASLR. */
-		personality(ADDR_NO_RANDOMIZE);
-		execv(session->inferior_path, session->inferior_args);
-	} else {
+	int status;
+
+	/* FIX: Should this be a while loop with the inverse condition instead? */
+	if (waitpid(session->inferior_pid, &status, __WALL | WNOHANG) <= 0)
+		return; /*current_msg;*/
+
+	/* TODO: Maybe add exit status/signal/stop signal to msg.value */
+	if (WIFEXITED(status)) {
 		/* TODO */
-		session->inferior_pid = pid;
+	} else if (WIFSTOPPED(status)) {
+		if (WSTOPSIG(status) == SIGTRAP)
+			/* TODO */;
 
-		int status;
-		waitpid(pid, &status, __WALL);
-
-		ptrace(PTRACE_SETOPTIONS, session->inferior_pid, NULL,
-			   PTRACE_O_EXITKILL);
+		/* TODO */
+	} else if (WIFSIGNALED(status)) {
+		/* TODO */
+	} else if (WIFCONTINUED(status)) {
+		/* TODO */
 	}
+}
+
+void read_inferior_output(DebugSession *session) {
+	/* TODO: Error handling and precondition checks */
+	/* TODO: Put in reader.c instead? */
+	size_t cursor_offset =
+		(size_t)(session->output.cursor - session->output.buffer);
+	if (cursor_offset + 1 > MAX_OUTPUT_SIZE) {
+		cursor_offset = 0;
+		session->output.cursor = session->output.buffer;
+	}
+	size_t bytes_remaining = MAX_OUTPUT_SIZE - cursor_offset;
+	long bytes_read = read(session->inferior_master_fd, session->output.cursor,
+						   bytes_remaining);
+	if (bytes_read == -1) {
+		/* TODO */
+	}
+	session->output.cursor += bytes_read;
 }
 
 /* The caller is responsible for freeing the returned buffer */
@@ -266,7 +350,7 @@ void free_line_instructions(LineInstructions *line_instructions) {
 }
 
 /* Returns true on success, false otherwise */
-bool set_breakpoint(DebugSession *session, size_t address) {
+bool add_breakpoint(DebugSession *session, size_t address) {
 	Breakpoints *breakpoint_data = session->breakpoints;
 
 	for (size_t i = 0; i < breakpoint_data->breakpoint_count; i++) {
@@ -275,13 +359,15 @@ bool set_breakpoint(DebugSession *session, size_t address) {
 	}
 
 	/* TODO: Handle error */
-	uint64_t word =
-		(uint64_t)ptrace(PTRACE_PEEKTEXT, session->inferior_pid, address);
-	uint8_t original_byte = word & 0xffU;
-	uint64_t breakpoint_word = (word & ~0xffULL) | INT3;
 
-	Breakpoint breakpoint = {.address = address,
-							 .original_byte = original_byte};
+	/* TODO: Maybe don't call this function when the debuggee hasnt been spawned
+	 * yet. */
+	/*
+	uint8_t original_byte =
+		set_process_breakpoint(session->inferior_pid, address);
+	*/
+
+	Breakpoint breakpoint = {.address = address, .original_byte = 0};
 
 	breakpoint_data->breakpoint_count += 1;
 	breakpoint_data->breakpoints =
@@ -289,9 +375,6 @@ bool set_breakpoint(DebugSession *session, size_t address) {
 					 breakpoint_data->breakpoint_count, sizeof(Breakpoint));
 	breakpoint_data->breakpoints[breakpoint_data->breakpoint_count - 1] =
 		breakpoint;
-
-	ptrace(PTRACE_POKETEXT, session->inferior_pid, breakpoint.address,
-		   breakpoint_word);
 
 	return true;
 }
@@ -313,8 +396,6 @@ void remove_breakpoint(DebugSession *session, size_t address) {
 		}
 	}
 
-	/* TODO: Maybe update source breakpoints too just in case to prevent state
-	 * bug */
 	SourceBreakpoints *src_breakpoint_data = session->src_breakpoints;
 
 	for (size_t i = 0; i < src_breakpoint_data->src_breakpoint_count; i++) {
@@ -335,7 +416,7 @@ void toggle_breakpoint(DebugSession *session, size_t address) {
 			return;
 		}
 	}
-	set_breakpoint(session, address);
+	add_breakpoint(session, address);
 }
 
 bool set_source_breakpoint(DebugSession *session, size_t comp_unit_index,
@@ -374,10 +455,10 @@ bool set_source_breakpoint(DebugSession *session, size_t comp_unit_index,
 	if (!found_address)
 		return false;
 
-	/* FIX: Since set_breakpoint fails if there is more than one breakpoint for
+	/* Since add_breakpoint fails if there is more than one breakpoint for
 	 * a given address, the user cannot set a source breakpoint and a normal
 	 * breakpoint which correspond to the same address, at the same time. */
-	bool is_breakpoint_set = set_breakpoint(session, address);
+	bool is_breakpoint_set = add_breakpoint(session, address);
 	if (is_breakpoint_set) {
 		SourceBreakpoint src_breakpoint = {.address = address,
 										   .comp_unit_index = comp_unit_index,

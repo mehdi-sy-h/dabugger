@@ -24,8 +24,10 @@
 #define KEY_CHORD_FILE_PICKER CTRL('p')
 #define KEY_CONFIRM '\n'
 #define KEY_TOGGLE_BREAKPOINT ' '
-#define KEY_START_PROG 'R'
+#define KEY_RUN_PROG 'R'
 #define KEY_STOP_PROG 'F'
+#define KEY_STEP_INSTRUCTION 's'
+#define KEY_STEP_OVER 'S'
 
 typedef enum {
 	MSG_NONE = 0,
@@ -39,6 +41,9 @@ typedef enum {
 	MSG_SET_ASSEMBLY_BUFFER,
 	MSG_TOGGLE_BREAKPOINT,
 	MSG_OUTPUT_UPDATE,
+	MSG_RUN_DEBUGGEE,
+	MSG_STEP_INSTRUCTION,
+	MSG_STEP_OVER,
 } TuiMsgType;
 
 typedef enum {
@@ -46,6 +51,7 @@ typedef enum {
 	CMD_SELECT_COMP_UNIT,
 	CMD_TOGGLE_BREAKPOINT,
 	CMD_TOGGLE_SOURCE_BREAKPOINT,
+	CMD_RUN_DEBUGGEE,
 } TuiCmdType;
 
 typedef enum {
