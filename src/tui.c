@@ -497,7 +497,9 @@ void view_tui(TuiModel *model) {
 		mvwin(assembly_win, 0, cols / 2);
 		wresize(assembly_win, 2 * rows / 3, cols / 2);
 	}
-	set_win_border(assembly_win, A_NORMAL, 0);
+	set_win_border(assembly_win, A_NORMAL,
+				   model->session->state == DEBUG_DEAD ? DEFAULT_COLOR
+													   : BREAKPOINT_COLOR);
 	wattron(assembly_win, A_BOLD);
 	mvwprintw(assembly_win, 1, 2, "%s", "Assembly");
 	wattroff(assembly_win, A_BOLD);
