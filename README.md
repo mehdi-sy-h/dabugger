@@ -1,3 +1,5 @@
+https://github.com/user-attachments/assets/7088da90-46a2-433a-a03c-8178fe0cea0c
+
 # dabugger
 An x86-64 Linux debugger for ELF+DWARF executables.
 
