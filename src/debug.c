@@ -3,6 +3,7 @@
 #include "elf.h"
 
 #include <Zydis/Disassembler.h>
+#include <assert.h>
 #include <pty.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +11,7 @@
 #include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/signalfd.h>
+#include <sys/user.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -64,15 +66,39 @@ static char *get_file_path(LineNumProgHeader64 *line_prog_header,
 	return file_path;
 }
 
-/* Sets the breakpoint by inserting an INT3 instruction at address.
- * Returns the original byte that was replaced by INT3. */
-static uint8_t set_process_breakpoint(pid_t pid, size_t address) {
-	/* TODO: Handle errors */
+/* Retrieves a byte from the .text section of the ELF binary.
+ * Use this as an alternative to PTRACE_PEEKTEXT where necessary. */
+static uint8_t get_text_data(DebugSession *session, size_t virtual_address) {
+	SectionBuffer text_section = session->program_data->sections.text;
+
+	assert(virtual_address >= text_section.address &&
+		   virtual_address < text_section.address + text_section.size);
+
+	size_t offset_address = virtual_address - text_section.address;
+	return text_section.data[offset_address];
+}
+
+static void inject_byte(pid_t pid, size_t address, uint8_t byte) {
+	/* TODO: Handle errors, and assert if PEEKTEXT is currently usable. */
 	uint64_t word = (uint64_t)ptrace(PTRACE_PEEKTEXT, pid, address);
-	uint8_t original_byte = word & 0xffU;
-	uint64_t breakpoint_word = (word & ~0xffULL) | INT3;
-	ptrace(PTRACE_POKETEXT, pid, address, breakpoint_word);
-	return original_byte;
+	uint64_t patched_word = (word & ~0xffULL) | byte;
+	ptrace(PTRACE_POKETEXT, pid, address, patched_word);
+}
+
+/* Sets the breakpoints by inserting an INT3 instruction at each address.
+ * Does not insert a breakpoint at the current instruction pointer. */
+static void inject_breakpoints(DebugSession *session) {
+	Breakpoints *breakpoint_data = session->breakpoints;
+
+	struct user_regs_struct regs;
+	ptrace(PTRACE_GETREGS, session->inferior_pid, NULL, &regs);
+
+	for (size_t i = 0; i < breakpoint_data->breakpoint_count; i++) {
+		Breakpoint *breakpoint = &breakpoint_data->breakpoints[i];
+		if (breakpoint->address == regs.rip)
+			continue;
+		inject_byte(session->inferior_pid, breakpoint->address, INT3);
+	}
 }
 
 void spawn_inferior(DebugSession *session) {
@@ -105,17 +131,16 @@ void spawn_inferior(DebugSession *session) {
 	ptrace(PTRACE_SETOPTIONS, session->inferior_pid, NULL, PTRACE_O_EXITKILL);
 
 	/* TODO: Better (more "functional/reactive"?) way to update breakpoints */
-	Breakpoints *breakpoint_data = session->breakpoints;
-
-	for (size_t i = 0; i < breakpoint_data->breakpoint_count; i++) {
-		Breakpoint breakpoint = breakpoint_data->breakpoints[i];
-		set_process_breakpoint(pid, breakpoint.address);
-	}
+	inject_breakpoints(session);
 }
 
 void continue_inferior(DebugSession *session) {
 	/*assert(session->state == DEBUG_DEAD || session->state ==
 	 * DEBUG_BREAKPOINT);*/
+
+	/* TODO: Better (more "functional/reactive"?) way to update breakpoints */
+	inject_breakpoints(session);
+
 	ptrace(PTRACE_CONT, session->inferior_pid);
 }
 
@@ -167,8 +192,24 @@ void handle_inferior_signal(DebugSession *session, int signal_child_fd) {
 	if (WIFEXITED(status)) {
 		/* TODO */
 	} else if (WIFSTOPPED(status)) {
-		if (WSTOPSIG(status) == SIGTRAP)
-			/* TODO */;
+		/* TODO: If breakpoint, restore byte and decrement RIP */
+		if (WSTOPSIG(status) == SIGTRAP) {
+			struct user_regs_struct regs;
+			ptrace(PTRACE_GETREGS, session->inferior_pid, NULL, &regs);
+			regs.rip -= 1;
+
+			for (size_t i = 0; i < session->breakpoints->breakpoint_count;
+				 i++) {
+				Breakpoint breakpoint = session->breakpoints->breakpoints[i];
+				if (breakpoint.address != regs.rip)
+					continue;
+				inject_byte(session->inferior_pid, regs.rip,
+							breakpoint.original_byte);
+				ptrace(PTRACE_SETREGS, session->inferior_pid, NULL, &regs);
+				break;
+			}
+		}
+		/* TODO */;
 
 		/* TODO */
 	} else if (WIFSIGNALED(status)) {
@@ -248,6 +289,7 @@ AssemblyBuffer *get_assembly_buffer(DebugSession *session,
 	LineInfoCompUnit comp_unit =
 		session->line_info->comp_units[comp_unit_index];
 
+	/* TODO: Refactor by using get_text_data() */
 	SectionBuffer text_section = session->program_data->sections.text;
 
 	for (size_t i = 0; i < comp_unit.table->sequences_count; i++) {
@@ -366,8 +408,10 @@ bool add_breakpoint(DebugSession *session, size_t address) {
 	uint8_t original_byte =
 		set_process_breakpoint(session->inferior_pid, address);
 	*/
+	uint8_t original_byte = get_text_data(session, address);
 
-	Breakpoint breakpoint = {.address = address, .original_byte = 0};
+	Breakpoint breakpoint = {.address = address,
+							 .original_byte = original_byte};
 
 	breakpoint_data->breakpoint_count += 1;
 	breakpoint_data->breakpoints =
