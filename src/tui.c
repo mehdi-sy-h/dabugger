@@ -321,6 +321,7 @@ static void view_source_buffer(TuiModel *model) {
 		}
 
 		bool is_breakpoint = false;
+		bool is_current_instruction = false;
 		attr_t line_num_attrs = line_attrs;
 
 		for (size_t b = 0; b < src_breakpoint_data->src_breakpoint_count; b++) {
@@ -331,12 +332,12 @@ static void view_source_buffer(TuiModel *model) {
 					model->selected_comp_unit_index &&
 				src_breakpoint.line_num == zero_indexed_line_num + 1) {
 				is_breakpoint = true;
+				is_current_instruction = src_breakpoint.address ==
+										 model->session->inferior_registers.rip;
 				line_num_attrs = A_BOLD | COLOR_PAIR(BREAKPOINT_COLOR);
 				break;
 			}
 		}
-
-		bool is_current_instruction = false;
 
 		wattron(source_win, line_num_attrs);
 		mvwprintw(source_win, (int)i + 2, 1, "%4ld", zero_indexed_line_num + 1);
@@ -422,7 +423,8 @@ static void view_assembly_buffer(TuiModel *model) {
 			}
 		}
 
-		bool is_current_instruction = false;
+		bool is_current_instruction =
+			model->session->inferior_registers.rip == address;
 
 		wattron(assembly_win, line_num_attrs);
 		mvwprintw(assembly_win, (int)i + 2, 1, "%4ld %16lx",
