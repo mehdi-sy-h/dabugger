@@ -17,6 +17,9 @@ add_compile_options(
 	-Wpedantic
 	-Wshadow
 	-Wconversion
+	# TODO: Remove the following two options once supported
+	-gdwarf64
+	-fno-pie
 )
 
 add_executable(${PROJECT_NAME}
@@ -28,9 +31,14 @@ add_executable(${PROJECT_NAME}
 	src/debug.c
 )
 
+# TODO: Remove the line once supported
+target_link_options(${PROJECT_NAME} PRIVATE -no-pie)
+
 target_compile_options(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Debug>:-g3 -Og>
 	$<$<CONFIG:Release>:-O2 -DNDEBUG>
+	# TODO: Remove the following option once supported
+	$<$<C_COMPILER_ID:GNU>:-gno-as-loc-support>
 )
 
 # TODO: Allow non-wide or curses support (will require guards in tui.h)
