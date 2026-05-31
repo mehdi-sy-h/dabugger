@@ -5,8 +5,10 @@
 #include <assert.h>
 #include <ctype.h>
 #include <locale.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/user.h>
 
 /* TODO: Non widechar support */
 #define NCURSES_WIDECHAR 1
@@ -456,6 +458,52 @@ static void view_output_buffer(TuiModel *model) {
 	}
 }
 
+static void view_registers_buffer(TuiModel *model) {
+	/* TODO: Clean up slopcode (only place in codebase with slopcode iirc) */
+	if (model->session->state == DEBUG_DEAD)
+		return;
+
+	static const struct {
+		const char *name;
+		size_t offset;
+	} reg_table[] = {
+		{"rax", offsetof(struct user_regs_struct, rax)},
+		{"rbx", offsetof(struct user_regs_struct, rbx)},
+		{"rcx", offsetof(struct user_regs_struct, rcx)},
+		{"rdx", offsetof(struct user_regs_struct, rdx)},
+		{"rsi", offsetof(struct user_regs_struct, rsi)},
+		{"rdi", offsetof(struct user_regs_struct, rdi)},
+		{"rbp", offsetof(struct user_regs_struct, rbp)},
+		{"rsp", offsetof(struct user_regs_struct, rsp)},
+		{"r8", offsetof(struct user_regs_struct, r8)},
+		{"r9", offsetof(struct user_regs_struct, r9)},
+		{"r10", offsetof(struct user_regs_struct, r10)},
+		{"r11", offsetof(struct user_regs_struct, r11)},
+		{"r12", offsetof(struct user_regs_struct, r12)},
+		{"r13", offsetof(struct user_regs_struct, r13)},
+		{"r14", offsetof(struct user_regs_struct, r14)},
+		{"r15", offsetof(struct user_regs_struct, r15)},
+		{"rip", offsetof(struct user_regs_struct, rip)},
+		{"eflags", offsetof(struct user_regs_struct, eflags)},
+	};
+	static size_t reg_count = sizeof(reg_table) / sizeof(reg_table[0]);
+
+	struct user_regs_struct *registers = &model->session->inferior_registers;
+
+	unsigned rows = (unsigned)getmaxy(registers_win) - SECTION_ROW_MARGIN;
+	size_t col_height = (reg_count + 1) / 2;
+
+	for (size_t i = 0; i < reg_count; i++) {
+		size_t value = *(size_t *)((char *)registers + reg_table[i].offset);
+		int row = (int)(i % col_height) + 2;
+		int col = (i < col_height) ? 2 : 30;
+		if ((unsigned)(row - 2) >= rows)
+			continue;
+		mvwprintw(registers_win, row, col, "%-6s 0x%016lx", reg_table[i].name,
+				  value);
+	}
+}
+
 void view_tui(TuiModel *model) {
 	unsigned rows, cols;
 	getmaxyx(stdscr, rows, cols);
@@ -534,6 +582,7 @@ void view_tui(TuiModel *model) {
 		mvwin(registers_win, 2 * rows / 3, cols / 2);
 		wresize(registers_win, rows / 3, cols / 2);
 	}
+	view_registers_buffer(model);
 	set_win_border(registers_win, A_NORMAL, 0);
 	wattron(registers_win, A_BOLD);
 	mvwprintw(registers_win, 1, 2, "%s", "Registers");

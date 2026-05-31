@@ -104,7 +104,6 @@ static void inject_breakpoints(DebugSession *session) {
 }
 
 void spawn_inferior(DebugSession *session) {
-	/* TODO: Reap old child process */
 	assert(session->state == DEBUG_DEAD);
 
 	pid_t pid = forkpty(&session->inferior_master_fd, NULL, NULL, NULL);
@@ -197,6 +196,9 @@ void handle_inferior_signal(DebugSession *session, int signal_child_fd) {
 
 			session->output.cursor = session->output.buffer;
 			memset(session->output.buffer, 0, MAX_OUTPUT_SIZE);
+
+			memset(&session->inferior_registers, 0,
+				   sizeof(struct user_regs_struct));
 		} else if (WIFSTOPPED(status)) {
 			if (WSTOPSIG(status) == SIGTRAP) {
 				struct user_regs_struct regs;
@@ -214,6 +216,8 @@ void handle_inferior_signal(DebugSession *session, int signal_child_fd) {
 					ptrace(PTRACE_SETREGS, session->inferior_pid, NULL, &regs);
 					break;
 				}
+
+				session->inferior_registers = regs;
 			}
 
 			/* TODO */

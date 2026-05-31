@@ -5,6 +5,7 @@
 #include "elf.h"
 
 #include <sys/types.h>
+#include <sys/user.h>
 
 #define MAX_OUTPUT_SIZE 1024
 
@@ -43,6 +44,7 @@ typedef struct {
 
 typedef struct {
 	OutputBuffer output;
+	struct user_regs_struct inferior_registers;
 	const char *inferior_path;
 	char **inferior_args;
 	ProgramData *program_data;
