@@ -86,7 +86,9 @@ static void inject_byte(pid_t pid, size_t address, uint8_t byte) {
 }
 
 /* Sets the breakpoints by inserting an INT3 instruction at each address.
- * Does not insert a breakpoint at the current instruction pointer. */
+ * Will not inject a trap at the current instruction pointer,
+ * this is to avoid getting stuck in a SIGTRAP loop.
+ * TODO: Determine if skipping IP causes issues in some edge case. */
 static void inject_breakpoints(DebugSession *session) {
 	Breakpoints *breakpoint_data = session->breakpoints;
 
@@ -184,38 +186,42 @@ void handle_inferior_signal(DebugSession *session, int signal_child_fd) {
 
 	int status;
 
-	/* FIX: Should this be a while loop with the inverse condition instead? */
-	if (waitpid(session->inferior_pid, &status, __WALL | WNOHANG) <= 0)
-		return; /*current_msg;*/
+	while (waitpid(session->inferior_pid, &status, __WALL | WNOHANG) > 0) {
+		if (WIFEXITED(status)) {
+			/* TODO */
+			session->state = DEBUG_DEAD;
+			session->inferior_pid = 0;
 
-	/* TODO: Maybe add exit status/signal/stop signal to msg.value */
-	if (WIFEXITED(status)) {
-		/* TODO */
-	} else if (WIFSTOPPED(status)) {
-		/* TODO: If breakpoint, restore byte and decrement RIP */
-		if (WSTOPSIG(status) == SIGTRAP) {
-			struct user_regs_struct regs;
-			ptrace(PTRACE_GETREGS, session->inferior_pid, NULL, &regs);
-			regs.rip -= 1;
+			close(session->inferior_master_fd);
+			session->inferior_master_fd = -1;
 
-			for (size_t i = 0; i < session->breakpoints->breakpoint_count;
-				 i++) {
-				Breakpoint breakpoint = session->breakpoints->breakpoints[i];
-				if (breakpoint.address != regs.rip)
-					continue;
-				inject_byte(session->inferior_pid, regs.rip,
-							breakpoint.original_byte);
-				ptrace(PTRACE_SETREGS, session->inferior_pid, NULL, &regs);
-				break;
+			session->output.cursor = session->output.buffer;
+			memset(session->output.buffer, 0, MAX_OUTPUT_SIZE);
+		} else if (WIFSTOPPED(status)) {
+			if (WSTOPSIG(status) == SIGTRAP) {
+				struct user_regs_struct regs;
+				ptrace(PTRACE_GETREGS, session->inferior_pid, NULL, &regs);
+				regs.rip -= 1;
+
+				for (size_t i = 0; i < session->breakpoints->breakpoint_count;
+					 i++) {
+					Breakpoint breakpoint =
+						session->breakpoints->breakpoints[i];
+					if (breakpoint.address != regs.rip)
+						continue;
+					inject_byte(session->inferior_pid, regs.rip,
+								breakpoint.original_byte);
+					ptrace(PTRACE_SETREGS, session->inferior_pid, NULL, &regs);
+					break;
+				}
 			}
-		}
-		/* TODO */;
 
-		/* TODO */
-	} else if (WIFSIGNALED(status)) {
-		/* TODO */
-	} else if (WIFCONTINUED(status)) {
-		/* TODO */
+			/* TODO */
+		} else if (WIFSIGNALED(status)) {
+			/* TODO */
+		} else if (WIFCONTINUED(status)) {
+			/* TODO */
+		}
 	}
 }
 
@@ -231,10 +237,11 @@ void read_inferior_output(DebugSession *session) {
 	size_t bytes_remaining = MAX_OUTPUT_SIZE - cursor_offset;
 	long bytes_read = read(session->inferior_master_fd, session->output.cursor,
 						   bytes_remaining);
-	if (bytes_read == -1) {
+	if (bytes_read > 0) {
+		session->output.cursor += bytes_read;
+	} else {
 		/* TODO */
 	}
-	session->output.cursor += bytes_read;
 }
 
 /* The caller is responsible for freeing the returned buffer */
