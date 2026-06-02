@@ -28,10 +28,14 @@ If you want to build the debugger with debug symbols, do the above but swap the 
 If you are using `gcc` or `clang`, compile the program you want to debug with the additional flags `-gdwarf-5 -g3 -Og`.
 Then run `dabugger path-to-your-executable`.
 
+**NOTE:** Currently, along with the above compiler arguments, you must also compile with `-fno-pie -no-pie -gdwarf64`. This is because I have not yet implemented PIE handling or 32 bit DWARF. If you are using `gcc`, also read the following section.
+
 ### 64 bit DWARF Support
 `dabugger` supports the 64 bit DWARF format, however if you are compiling with `gcc` with `-gdwarf64` you must also supply `-gno-as-loc-support`. This is because the GNU assembler does not emit `.debug_line` in DWARF64, but `gcc` can do so internally. If you want to keep track of this issue, you can find my bug report [here](https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124847). Alternatively, `clang` appears to generate 64 bit DWARF without issue.
 
-Regardless, the DWARF specification recommends using the 32 bit DWARF format anyway. You will most likely never need 64 bit DWARF; it does not refer to the word size of the executable but rather the offset address sizes in the `.debug_*` sections, and these sections are highly unlikely to exceed 4GiB even for a massive codebase (compiling the `gcc` version 16.0.1 compiler itself with debug symbols, you find that all `.debug_*` sections are less than 12MiB).
+Currently dabugger requires 64 bit DWARF.
+
+~~Regardless, the DWARF specification recommends using the 32 bit DWARF format anyway. You will most likely never need 64 bit DWARF; it does not refer to the word size of the executable but rather the offset address sizes in the `.debug_*` sections, and these sections are highly unlikely to exceed 4GiB even for a massive codebase (compiling the `gcc` version 16.0.1 compiler itself with debug symbols, you find that all `.debug_*` sections are less than 12MiB).~~
 
 ## Todo?
 - Parse other DWARF sections (`.debug_loc`, etc) to implement variable inspection.
