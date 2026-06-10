@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.30)
 
 project(dabugger
-	VERSION 0.1.0
-	LANGUAGES C
+  VERSION 0.1.0
+  LANGUAGES C
 )
 
 set(CMAKE_C_STANDARD 23)
@@ -12,33 +12,33 @@ set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_options(
-	-Wall
-	-Wextra
-	-Wpedantic
-	-Wshadow
-	-Wconversion
-	# TODO: Remove the following two options once supported
-	-gdwarf64
-	-fno-pie
+  -Wall
+  -Wextra
+  -Wpedantic
+  -Wshadow
+  -Wconversion
+  # TODO: Remove the following option once supported
+  -fno-pie
 )
 
 add_executable(${PROJECT_NAME}
-	src/dabugger.c
-	src/elf.c
-	src/dwarf.c
-	src/reader.c
-	src/tui.c
-	src/debug.c
+  src/dabugger.c
+  src/elf.c
+  src/dwarf.c
+  src/reader.c
+  src/tui.c
+  src/debug.c
 )
 
 # TODO: Remove the line once supported
-target_link_options(${PROJECT_NAME} PRIVATE -no-pie)
+target_link_options(${PROJECT_NAME} PRIVATE
+  -fsanitize=address,undefined
+  -no-pie
+)
 
 target_compile_options(${PROJECT_NAME} PRIVATE
-	$<$<CONFIG:Debug>:-g3 -Og>
-	$<$<CONFIG:Release>:-O2 -DNDEBUG>
-	# TODO: Remove the following option once supported
-	$<$<C_COMPILER_ID:GNU>:-gno-as-loc-support>
+  $<$<CONFIG:Debug>:-g3 -Og -fsanitize=address,undefined>
+  $<$<CONFIG:Release>:-O2 -DNDEBUG>
 )
 
 # TODO: Allow non-wide or curses support (will require guards in tui.h)
@@ -47,13 +47,13 @@ set(CURSES_NEED_WIDE TRUE)
 find_package(Curses REQUIRED)
 
 if(Curses_FOUND AND NOT TARGET Curses::Curses)
-	add_library(Curses::Curses INTERFACE IMPORTED)
-	set_target_properties(
-				Curses::Curses
-				PROPERTIES
-						INTERFACE_LINK_LIBRARIES "${CURSES_LIBRARIES}"
-						INTERFACE_INCLUDE_DIRECTORIES "${CURSES_INCLUDE_DIRS}"
-		)
+  add_library(Curses::Curses INTERFACE IMPORTED)
+  set_target_properties(
+        Curses::Curses
+        PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${CURSES_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${CURSES_INCLUDE_DIRS}"
+    )
 endif()
 
 find_library(PANEL_LIBRARY panelw REQUIRED)

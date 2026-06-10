@@ -19,7 +19,7 @@
 
 /* The caller is responsible for freeing the returned string */
 /* TODO: Put file paths in session struct so we can free these nicely */
-static char *get_file_path(LineNumProgHeader64 *line_prog_header,
+static char *get_file_path(LineNumProgHeader *line_prog_header,
 						   size_t file_index) {
 	/* TODO: If the path starts with /build/ then assume it was built with
 	 * nix (do further checks if there is a nice way to check) and replace

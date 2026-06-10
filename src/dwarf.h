@@ -7,13 +7,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef uint8_t InitialLength32; /* Must be less than 0xfffffff0 */
-
-typedef struct __attribute__((packed)) {
-	uint32_t marker; /* Always 0xffffffff for 64 bit DWARF */
-	uint64_t length;
-} InitialLength64;
-
 /* See Dwarf 5 Specification 7.22 */
 typedef enum {
 	DW_LNCT_path = 0x1,
@@ -61,8 +54,6 @@ typedef struct {
 	DwarfFormCode form_code;
 } DwarfLineNumFormatDesc;
 
-/* TODO: Type for 32 bit dwarf header */
-
 /* Not all the fields are necessarily defined for a given entry.
  * But they are all zero initialized, including fields that are undefined. */
 typedef struct {
@@ -73,13 +64,14 @@ typedef struct {
 	uint8_t md5[16];
 } DwarfLineNumContentEntry;
 
-/* The line number program header for a compilation unit (64 bit format) */
+/* The line number program header for a compilation unit */
 typedef struct {
-	InitialLength64 unit_length;
+	bool is_dwarf64;
+	uint64_t unit_length; /* DWARF32 only uses 4 bytes */
 	uint16_t version;
 	uint8_t address_size;
 	uint8_t segment_selector_size;
-	uint64_t header_length;
+	uint64_t header_length; /* DWARF32 only uses 4 bytes */
 	uint8_t minimum_instruction_length;
 	uint8_t maximum_operations_per_instruction;
 	uint8_t default_is_stmt;
@@ -95,7 +87,7 @@ typedef struct {
 	DwarfLineNumFormatDesc *file_name_entry_format;
 	uint64_t file_names_count;
 	DwarfLineNumContentEntry *file_names;
-} LineNumProgHeader64;
+} LineNumProgHeader;
 
 /* See Dwarf 5 Specification 6.2.3 */
 typedef enum {
@@ -164,7 +156,7 @@ typedef struct {
 /* The line number information for a particular compilation unit referenced
  * in the inferior executable's `.debug_line` section. */
 typedef struct {
-	LineNumProgHeader64 *header;
+	LineNumProgHeader *header;
 	LineInfoTable *table;
 } LineInfoCompUnit;
 

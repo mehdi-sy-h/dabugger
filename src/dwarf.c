@@ -22,7 +22,8 @@ typedef struct {
 static void read_lnct_path(BinaryReader *debug_line_reader,
 						   SectionBuffer *debug_line_str_buffer,
 						   DwarfFormCode form_code,
-						   DwarfLineNumContentEntry *out_entry) {
+						   DwarfLineNumContentEntry *out_entry,
+						   bool is_dwarf64) {
 	const char *path;
 	ReadResult result;
 
@@ -30,8 +31,9 @@ static void read_lnct_path(BinaryReader *debug_line_reader,
 		result = read_cstring(debug_line_reader, &path);
 	} else if (form_code == DW_FORM_line_strp || form_code == DW_FORM_strp ||
 			   form_code == DW_FORM_strp_sup) {
-		uint64_t offset; /* TODO: This is uint32_t if using 32 bit dwarf */
-		result = read_bytes(debug_line_reader, &offset, 8);
+		uint64_t offset = 0;
+		/* This is 4 bytes for 32 bit dwarf */
+		result = read_bytes(debug_line_reader, &offset, is_dwarf64 ? 8 : 4);
 
 		if (form_code == DW_FORM_line_strp) {
 			/* TODO: Again for similar reasons as above this could be unsafe
@@ -66,7 +68,6 @@ static void read_lnct_path(BinaryReader *debug_line_reader,
 		return;
 	}
 
-	/*printf("%s\n", path);*/
 	out_entry->path = path;
 }
 
@@ -173,18 +174,16 @@ static void read_lnct_entries(DwarfLineNumContentEntry *entries,
 							  DwarfLineNumFormatDesc *formats,
 							  uint64_t entry_count, uint8_t format_count,
 							  BinaryReader *debug_line_reader,
-							  SectionBuffer *debug_line_str) {
+							  SectionBuffer *debug_line_str, bool is_dwarf64) {
 	for (uint64_t i = 0; i < entry_count; i++) {
 		DwarfLineNumContentEntry entry = {0};
 		for (uint8_t j = 0; j < format_count; j++) {
 			DwarfLineNumFormatDesc fmt = formats[j];
-			/* TODO: Fix */
 
 			switch (fmt.content_type) {
 			case DW_LNCT_path:
-				/*printf("[%ld]: ", i);*/
 				read_lnct_path(debug_line_reader, debug_line_str, fmt.form_code,
-							   &entry);
+							   &entry, is_dwarf64);
 				break;
 			case DW_LNCT_directory_index:
 				read_lnct_directory_index(debug_line_reader, fmt.form_code,
@@ -214,23 +213,36 @@ static void read_lnct_entries(DwarfLineNumContentEntry *entries,
 	}
 }
 
-/* TODO: 32 bit parsing is more important than 64 bit! */
-static LineNumProgHeader64 *
-parse_line_header64(ProgramSections *sections,
-					BinaryReader *debug_line_reader) {
+static LineNumProgHeader *parse_line_header(ProgramSections *sections,
+											BinaryReader *debug_line_reader) {
 	/* TODO: Put assert guards here (and all around the code base!) */
-	LineNumProgHeader64 *header = calloc(1, sizeof(LineNumProgHeader64));
+	LineNumProgHeader *header = calloc(1, sizeof(LineNumProgHeader));
+
+	uint32_t length_start = 0;
+	read_bytes(debug_line_reader, &length_start, 4);
+
+	if (length_start < 0xfffffff0) {
+		/* 32 bit DWARF */
+		header->is_dwarf64 = false;
+		header->unit_length = (uint64_t)length_start;
+	} else if (length_start == 0xffffffff) {
+		/* 64 bit DWARF */
+		header->is_dwarf64 = true;
+		read_bytes(debug_line_reader, &header->unit_length, 8);
+	} else {
+		/* Invalid length */
+		/* TODO: Handle invalid case */
+		assert(0);
+	}
 
 	/* TODO: Handle read results */
-	read_bytes(debug_line_reader, &header->unit_length,
-			   sizeof(header->unit_length));
 	read_bytes(debug_line_reader, &header->version, sizeof(header->version));
 	read_bytes(debug_line_reader, &header->address_size,
 			   sizeof(header->address_size));
 	read_bytes(debug_line_reader, &header->segment_selector_size,
 			   sizeof(header->segment_selector_size));
 	read_bytes(debug_line_reader, &header->header_length,
-			   sizeof(header->header_length));
+			   header->is_dwarf64 ? 8 : 4);
 	read_bytes(debug_line_reader, &header->minimum_instruction_length,
 			   sizeof(header->minimum_instruction_length));
 	read_bytes(debug_line_reader, &header->maximum_operations_per_instruction,
@@ -288,7 +300,7 @@ parse_line_header64(ProgramSections *sections,
 	read_lnct_entries(header->directories, header->directory_entry_format,
 					  header->directories_count,
 					  header->directory_entry_format_count, debug_line_reader,
-					  &sections->debug_line_str);
+					  &sections->debug_line_str, header->is_dwarf64);
 
 	/* TODO: Put these reads and allocations in read_lnct_entries too? */
 	read_bytes(debug_line_reader, &header->file_name_entry_format_count,
@@ -324,7 +336,7 @@ parse_line_header64(ProgramSections *sections,
 	read_lnct_entries(header->file_names, header->file_name_entry_format,
 					  header->file_names_count,
 					  header->file_name_entry_format_count, debug_line_reader,
-					  &sections->debug_line_str);
+					  &sections->debug_line_str, header->is_dwarf64);
 
 	return header;
 }
@@ -415,7 +427,7 @@ static void reset_line_num_state_machine(LineNumStateMachine *state_machine,
 }
 
 static void state_machine_advance_pc(LineNumStateMachine *state_machine,
-									 LineNumProgHeader64 *header,
+									 LineNumProgHeader *header,
 									 uint64_t op_advance) {
 	state_machine->address += header->minimum_instruction_length *
 							  ((state_machine->op_index + op_advance) /
@@ -424,7 +436,7 @@ static void state_machine_advance_pc(LineNumStateMachine *state_machine,
 							  header->maximum_operations_per_instruction;
 }
 
-static LineInfoTable decode_line_num_prog(LineNumProgHeader64 *header,
+static LineInfoTable decode_line_num_prog(LineNumProgHeader *header,
 										  BinaryReader *debug_line_reader) {
 	LineInfoTable line_info_table = {0};
 
@@ -436,9 +448,9 @@ static LineInfoTable decode_line_num_prog(LineNumProgHeader64 *header,
 	 * length value up until the end of the header.
 	 * See DWARF 5 Specification Section 6.2.4 Page 154 */
 	uint64_t line_prog_length =
-		header->unit_length.length - sizeof(header->version) -
+		header->unit_length - sizeof(header->version) -
 		sizeof(header->address_size) - sizeof(header->segment_selector_size) -
-		sizeof(header->header_length) - header->header_length;
+		(header->is_dwarf64 ? 8 : 4) - header->header_length;
 	assert(line_prog_length <= debug_line_reader->remaining);
 
 	uint64_t orig_remaining = debug_line_reader->remaining;
@@ -588,8 +600,8 @@ LineInfo *parse_debug_line_section(ProgramSections sections) {
 	line_info->comp_units = NULL;
 
 	while (debug_line_reader.remaining > 0) {
-		LineNumProgHeader64 *header =
-			parse_line_header64(&sections, &debug_line_reader);
+		LineNumProgHeader *header =
+			parse_line_header(&sections, &debug_line_reader);
 
 		line_info->comp_unit_count++;
 
