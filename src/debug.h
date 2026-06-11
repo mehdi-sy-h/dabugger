@@ -45,12 +45,13 @@ typedef struct {
 typedef struct {
 	OutputBuffer output;
 	struct user_regs_struct inferior_registers;
-	const char *inferior_path;
+	const char *inferior_real_path;
 	char **inferior_args;
 	ProgramData *program_data;
 	LineInfo *line_info;
 	Breakpoints *breakpoints;
 	SourceBreakpoints *src_breakpoints;
+	size_t proc_load_address;
 	DebugState state;
 	pid_t inferior_pid;
 	int inferior_master_fd;
@@ -89,6 +90,8 @@ AssemblyBuffer *get_assembly_buffer(DebugSession *session,
 									size_t comp_unit_index);
 LinesBuffer *get_file_picker_buffer(DebugSession *session);
 void free_lines_buffer(LinesBuffer *buffer);
+
+size_t get_instruction_pointer_vma(DebugSession *session);
 
 LineInstructions *get_instructions_for_line(DebugSession *session,
 											size_t comp_unit_index,

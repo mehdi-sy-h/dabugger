@@ -320,6 +320,8 @@ static void view_source_buffer(TuiModel *model) {
 			line_attrs = A_NORMAL | COLOR_PAIR(DEFAULT_COLOR);
 		}
 
+		size_t rip_as_vma = get_instruction_pointer_vma(model->session);
+
 		bool is_breakpoint = false;
 		bool is_current_instruction = false;
 		attr_t line_num_attrs = line_attrs;
@@ -332,8 +334,7 @@ static void view_source_buffer(TuiModel *model) {
 					model->selected_comp_unit_index &&
 				src_breakpoint.line_num == zero_indexed_line_num + 1) {
 				is_breakpoint = true;
-				is_current_instruction = src_breakpoint.address ==
-										 model->session->inferior_registers.rip;
+				is_current_instruction = src_breakpoint.address == rip_as_vma;
 				line_num_attrs = A_BOLD | COLOR_PAIR(BREAKPOINT_COLOR);
 				break;
 			}
@@ -424,7 +425,7 @@ static void view_assembly_buffer(TuiModel *model) {
 		}
 
 		bool is_current_instruction =
-			model->session->inferior_registers.rip == address;
+			get_instruction_pointer_vma(model->session) == address;
 
 		wattron(assembly_win, line_num_attrs);
 		mvwprintw(assembly_win, (int)i + 2, 1, "%4ld %16lx",
@@ -607,6 +608,7 @@ void view_tui(TuiModel *model) {
 	wattroff(picker_win, A_BOLD);
 
 	if (model->is_picker_open) {
+		/* FIX: Picker needs to be scrollable */
 		TuiLinesBuffer picker_buffer = model->buffers.picker;
 		for (size_t i = 0; i < picker_buffer.buffer->line_count; i++) {
 			if (i == picker_buffer.selected_line) {

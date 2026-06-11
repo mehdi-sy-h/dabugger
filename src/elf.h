@@ -20,6 +20,7 @@ typedef struct {
 typedef struct {
 	ProgramSections sections;
 	size_t entry_point;
+	size_t load_address;
 } ProgramData;
 
 ProgramData parse_elf_file(const char *path);

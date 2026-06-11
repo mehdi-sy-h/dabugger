@@ -118,6 +118,32 @@ ProgramData parse_elf_file(const char *path) {
 
 	free(section_names);
 	free(section_header);
+
+	/* TODO: Handle malloc errors */
+	Elf64_Phdr *program_header =
+		malloc(elf_header.e_phentsize * elf_header.e_phnum);
+
+	seek_result = fseek(elf_file, (long)elf_header.e_phoff, SEEK_SET);
+	if (seek_result != 0)
+		goto sys_error;
+
+	read_count = fread(program_header, elf_header.e_phentsize,
+					   elf_header.e_phnum, elf_file);
+	if (read_count != elf_header.e_phnum)
+		goto sys_error;
+
+	size_t load_address = 0;
+
+	for (Elf64_Half i = 0; i < elf_header.e_phnum; i++) {
+		Elf64_Phdr current_program_header = program_header[i];
+		if (current_program_header.p_type == PT_LOAD) {
+			load_address = current_program_header.p_vaddr;
+			break;
+		}
+	}
+
+	free(program_header);
+
 	fclose(elf_file);
 
 	ProgramSections sections = {.text = text_section,
@@ -126,7 +152,8 @@ ProgramData parse_elf_file(const char *path) {
 								.debug_line_str = debug_line_str_section};
 
 	ProgramData data = {.sections = sections,
-						.entry_point = elf_header.e_entry};
+						.entry_point = elf_header.e_entry,
+						.load_address = load_address};
 	return data;
 
 sys_error:

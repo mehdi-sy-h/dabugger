@@ -17,6 +17,58 @@
 
 #define INT3 0xccU
 
+static bool get_load_address(pid_t pid, const char *elf_real_path,
+							 size_t *out_load_address) {
+	bool is_found_address = false;
+
+	char *maps_path = NULL;
+	if (asprintf(&maps_path, "/proc/%d/maps", pid) == -1) {
+		/* TODO: Handle error */
+	}
+
+	FILE *pid_maps = fopen(maps_path, "r");
+	free(maps_path);
+	if (pid_maps == NULL) {
+		/* TODO: Handle error */
+	}
+
+	char *mapping_line = NULL;
+	size_t line_len = 0;
+
+	size_t real_path_len = strlen(elf_real_path);
+
+	while (!is_found_address &&
+		   getline(&mapping_line, &line_len, pid_maps) > 0) {
+		size_t start_address = 0;
+		size_t end_address = 0;
+		size_t offset = 0;
+		char *path_name = calloc(1, line_len);
+
+		sscanf(mapping_line, "%lx-%lx %*s %ld %*s %*s %s", &start_address,
+			   &end_address, &offset, path_name);
+
+		bool is_backed_by_elf_file =
+			memcmp(path_name, elf_real_path, real_path_len) == 0;
+		free(path_name);
+
+		if (is_backed_by_elf_file) {
+			is_found_address = true;
+			*out_load_address = start_address;
+		}
+	}
+
+	free(mapping_line);
+	fclose(pid_maps);
+
+	return is_found_address;
+}
+
+static size_t get_address_from_vma(size_t virtual_address,
+								   size_t elf_load_address,
+								   size_t proc_load_address) {
+	return (proc_load_address - elf_load_address) + virtual_address;
+}
+
 /* The caller is responsible for freeing the returned string */
 /* TODO: Put file paths in session struct so we can free these nicely */
 static char *get_file_path(LineNumProgHeader *line_prog_header,
@@ -85,6 +137,7 @@ static void inject_byte(pid_t pid, size_t address, uint8_t byte) {
 	ptrace(PTRACE_POKETEXT, pid, address, patched_word);
 }
 
+/* FIX: Dont do it this way if you can find another */
 /* Sets the breakpoints by inserting an INT3 instruction at each address.
  * Will not inject a trap at the current instruction pointer,
  * this is to avoid getting stuck in a SIGTRAP loop.
@@ -97,9 +150,16 @@ static void inject_breakpoints(DebugSession *session) {
 
 	for (size_t i = 0; i < breakpoint_data->breakpoint_count; i++) {
 		Breakpoint *breakpoint = &breakpoint_data->breakpoints[i];
-		if (breakpoint->address == regs.rip)
+		size_t real_address = get_address_from_vma(
+			breakpoint->address, session->program_data->load_address,
+			session->proc_load_address);
+
+		/* TODO: Do this properly */
+		if (real_address == regs.rip)
 			continue;
-		inject_byte(session->inferior_pid, breakpoint->address, INT3);
+		fprintf(stderr, "vma: %lx, real: %lx\n", breakpoint->address,
+				real_address);
+		inject_byte(session->inferior_pid, real_address, INT3);
 	}
 }
 
@@ -110,9 +170,7 @@ void spawn_inferior(DebugSession *session) {
 
 	if (pid == 0) {
 		ptrace(PTRACE_TRACEME);
-		/* TODO: Read load address in /proc/pid/maps to support PIE and ASLR. */
-		personality(ADDR_NO_RANDOMIZE);
-		execv(session->inferior_path, session->inferior_args);
+		execv(session->inferior_real_path, session->inferior_args);
 		/* exec() functions only return on error
 		 * Also, we use _exit instead of exit because the debugger process might
 		 * want to read the child's stdio streams, and _exit() does not flush
@@ -123,13 +181,23 @@ void spawn_inferior(DebugSession *session) {
 		/* TODO: Handle error */
 	}
 
-	session->inferior_pid = pid;
-	session->state = DEBUG_RUNNING;
-
 	int status;
 	waitpid(pid, &status, 0);
 
+	session->inferior_pid = pid;
+	session->state = DEBUG_RUNNING;
+
 	ptrace(PTRACE_SETOPTIONS, session->inferior_pid, NULL, PTRACE_O_EXITKILL);
+
+	/* TODO: */
+	bool is_found_load_address = get_load_address(
+		pid, session->inferior_real_path, &session->proc_load_address);
+
+	fprintf(stderr, "%lx\n", session->proc_load_address);
+
+	if (!is_found_load_address) {
+		/* TODO: Handle */
+	}
 
 	/* TODO: Better (more "functional/reactive"?) way to update breakpoints */
 	inject_breakpoints(session);
@@ -142,7 +210,7 @@ void continue_inferior(DebugSession *session) {
 	/* TODO: Better (more "functional/reactive"?) way to update breakpoints */
 	inject_breakpoints(session);
 
-	ptrace(PTRACE_CONT, session->inferior_pid);
+	ptrace(PTRACE_CONT, session->inferior_pid, NULL, NULL);
 }
 
 void stop_inferior(DebugSession *session) {}
@@ -154,11 +222,10 @@ DebugSession *init_debug_session(const char *inferior_path,
 		/* TODO */
 	}
 
-	debug_session->inferior_path = inferior_path;
+	debug_session->inferior_real_path = realpath(inferior_path, NULL);
 	debug_session->inferior_args = inferior_args;
 	debug_session->inferior_master_fd = -1;
 	debug_session->program_data = calloc(1, sizeof(ProgramData));
-	debug_session->line_info = calloc(1, sizeof(LineInfo));
 	debug_session->breakpoints = calloc(1, sizeof(Breakpoints));
 	debug_session->src_breakpoints = calloc(1, sizeof(SourceBreakpoints));
 	debug_session->output.cursor = debug_session->output.buffer;
@@ -209,7 +276,14 @@ void handle_inferior_signal(DebugSession *session, int signal_child_fd) {
 					 i++) {
 					Breakpoint breakpoint =
 						session->breakpoints->breakpoints[i];
-					if (breakpoint.address != regs.rip)
+
+					size_t real_breakpoint_address = get_address_from_vma(
+						breakpoint.address, session->program_data->load_address,
+						session->proc_load_address);
+					fprintf(stderr, "vma: %lx, real: %lx\n", breakpoint.address,
+							real_breakpoint_address);
+
+					if (real_breakpoint_address != regs.rip)
 						continue;
 					inject_byte(session->inferior_pid, regs.rip,
 								breakpoint.original_byte);
@@ -282,6 +356,7 @@ LinesBuffer *get_source_buffer(DebugSession *session, size_t comp_unit_index) {
 
 	fclose(file);
 	free(file_name);
+	free(line);
 
 	return buffer;
 }
@@ -360,6 +435,11 @@ void free_lines_buffer(LinesBuffer *buffer) {
 	}
 	free(buffer->lines);
 	free(buffer);
+}
+
+size_t get_instruction_pointer_vma(DebugSession *session) {
+	return session->inferior_registers.rip +
+		   (session->program_data->load_address - session->proc_load_address);
 }
 
 /* Get the VMAs associated with the (1-indexed) line number.
