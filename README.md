@@ -28,8 +28,6 @@ If you want to build the debugger with debug symbols, do the above but swap the 
 If you are using `gcc` or `clang`, compile the program you want to debug with the additional flags `-gdwarf-5 -g3 -Og`.
 Then run `dabugger path-to-your-executable`.
 
-**NOTE:** Currently, along with the above compiler arguments, you must also compile with `-fno-pie -no-pie`. This is because I have not yet implemented PIE handling.
-
 ### 64 bit DWARF Support
 `dabugger` supports the 64 bit DWARF format, however if you are compiling with `gcc` with `-gdwarf64` you must also supply `-gno-as-loc-support`. This is because the GNU assembler does not emit `.debug_line` in DWARF64, but `gcc` can do so internally. If you want to keep track of this issue, you can find my bug report [here](https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124847). Alternatively, `clang` appears to generate 64 bit DWARF without issue.
 
@@ -37,5 +35,5 @@ Regardless, the DWARF specification recommends using the 32 bit DWARF format any
 
 ## Todo?
 - Parse other DWARF sections (`.debug_loc`, etc) to implement variable inspection.
-- Attach to process mode (requires handling position independent executables and ASLR).
+- Attach to process mode.
 - Support multithreaded debuggees.
