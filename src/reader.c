@@ -5,7 +5,7 @@
 #include <string.h>
 
 ReadResult advance_reader(BinaryReader *reader, size_t bytes) {
-	ReadResult result = {0};
+	ReadResult result = {.status = READ_OK};
 	if (bytes > reader->remaining) {
 		result.status = READ_ERR_OUT_OF_BOUNDS;
 		return result;
@@ -16,16 +16,25 @@ ReadResult advance_reader(BinaryReader *reader, size_t bytes) {
 	return result;
 }
 
-ReadResult read_bytes(BinaryReader *reader, void *out, size_t n) {
-	ReadResult result = {0};
-	if (n > reader->remaining) {
+ReadResult read_bytes(BinaryReader *reader, void *out, size_t bytes) {
+	const uint8_t *current_cursor = reader->cursor;
+
+	ReadResult result = advance_reader(reader, bytes);
+	if (result.status != READ_OK)
+		return result;
+
+	memcpy(out, current_cursor, bytes);
+	return result;
+}
+
+ReadResult peek_bytes(BinaryReader *reader, void *out, size_t bytes) {
+	ReadResult result = {.status = READ_OK};
+	if (bytes > reader->remaining) {
 		result.status = READ_ERR_OUT_OF_BOUNDS;
 		return result;
 	}
-	memcpy(out, reader->cursor, n);
-	reader->cursor += n;
-	reader->remaining -= n;
-	result.bytes_consumed = n;
+
+	memcpy(out, reader->cursor, bytes);
 	return result;
 }
 

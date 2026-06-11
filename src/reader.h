@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 typedef struct {
-	const uint8_t* cursor;
+	const uint8_t *cursor;
 	size_t remaining;
 } BinaryReader;
 
@@ -23,12 +23,14 @@ typedef struct {
 
 extern ReadResult advance_reader(BinaryReader *reader, size_t bytes);
 
-extern ReadResult read_bytes(BinaryReader *reader, void *out, size_t n);
+extern ReadResult read_bytes(BinaryReader *reader, void *out, size_t bytes);
+
+extern ReadResult peek_bytes(BinaryReader *reader, void *out, size_t bytes);
 
 extern ReadResult read_uleb128(BinaryReader *reader, uint64_t *out);
 
 extern ReadResult read_sleb128(BinaryReader *reader, int64_t *out);
 
-extern ReadResult read_cstring(BinaryReader *reader, const char** out);
+extern ReadResult read_cstring(BinaryReader *reader, const char **out);
 
 #endif /* DABUGGER_READER_H */
