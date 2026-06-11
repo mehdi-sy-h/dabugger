@@ -125,7 +125,7 @@ static void on_run_inferior(DebugSession *session) {
 
 int main(int argc, [[maybe_unused]] char *argv[argc + 1]) {
 	if (argc < 2) {
-		fprintf(stderr, "You must supply the executable to debug!");
+		fprintf(stderr, "You must supply the executable to debug!\n");
 		return EXIT_FAILURE;
 	}
 
