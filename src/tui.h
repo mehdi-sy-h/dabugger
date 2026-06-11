@@ -30,115 +30,115 @@
 #define KEY_STEP_OVER 'S'
 
 typedef enum {
-	MSG_NONE = 0,
-	MSG_QUIT,
-	MSG_SHOW_PICKER,
-	MSG_CONFIRM,
-	MSG_BUFFER_MOTION,
-	MSG_GO_TO_BUFFER_LINE,
-	MSG_CHANGE_SECTION,
-	MSG_SET_SOURCE_BUFFER,
-	MSG_SET_ASSEMBLY_BUFFER,
-	MSG_TOGGLE_BREAKPOINT,
-	MSG_OUTPUT_UPDATE,
-	MSG_RUN_DEBUGGEE,
-	MSG_STEP_INSTRUCTION,
-	MSG_STEP_OVER,
+    MSG_NONE = 0,
+    MSG_QUIT,
+    MSG_SHOW_PICKER,
+    MSG_CONFIRM,
+    MSG_BUFFER_MOTION,
+    MSG_GO_TO_BUFFER_LINE,
+    MSG_CHANGE_SECTION,
+    MSG_SET_SOURCE_BUFFER,
+    MSG_SET_ASSEMBLY_BUFFER,
+    MSG_TOGGLE_BREAKPOINT,
+    MSG_OUTPUT_UPDATE,
+    MSG_RUN_DEBUGGEE,
+    MSG_STEP_INSTRUCTION,
+    MSG_STEP_OVER,
 } TuiMsgType;
 
 typedef enum {
-	CMD_NONE = 0,
-	CMD_SELECT_COMP_UNIT,
-	CMD_TOGGLE_BREAKPOINT,
-	CMD_TOGGLE_SOURCE_BREAKPOINT,
-	CMD_RUN_DEBUGGEE,
+    CMD_NONE = 0,
+    CMD_SELECT_COMP_UNIT,
+    CMD_TOGGLE_BREAKPOINT,
+    CMD_TOGGLE_SOURCE_BREAKPOINT,
+    CMD_RUN_DEBUGGEE,
 } TuiCmdType;
 
 typedef enum {
-	WIN_SOURCE = 0,
-	WIN_ASSEMBLY,
-	WIN_OUTPUT,
-	WIN_REGISTERS,
-	WIN_PICKER,
+    WIN_SOURCE = 0,
+    WIN_ASSEMBLY,
+    WIN_OUTPUT,
+    WIN_REGISTERS,
+    WIN_PICKER,
 } TuiWindow;
 
 typedef struct {
-	enum Direction { DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT } direction;
-	union {
-		enum : long {
-			/* Used with MSG_BUFFER_MOTION  */
-			BUFFER_HALF = -3, /* Negative values so its possible to distinguish
-								 from absolute */
-			BUFFER_FULL = -2,
+    enum Direction { DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT } direction;
+    union {
+        enum : long {
+            /* Used with MSG_BUFFER_MOTION  */
+            BUFFER_HALF = -3, /* Negative values so its possible to distinguish
+                                                     from absolute */
+            BUFFER_FULL = -2,
 
-			/* Used with MSG_GO_TO_BUFFER_LINE  */
-			BUFFER_START = -1,
-			BUFFER_END = 0, /* Needs to be 0 to coincide with absolute = 0 */
-		} relative;
-		long absolute;
-	} amount;
+            /* Used with MSG_GO_TO_BUFFER_LINE  */
+            BUFFER_START = -1,
+            BUFFER_END = 0, /* Needs to be 0 to coincide with absolute = 0 */
+        } relative;
+        long absolute;
+    } amount;
 } TuiMotion;
 
 typedef struct {
-	TuiMsgType type;
-	union {
-		TuiMotion motion;
-		bool is_open;
-		LinesBuffer *new_source_buffer;
-		AssemblyBuffer *new_assembly_buffer;
-	} value;
+    TuiMsgType type;
+    union {
+        TuiMotion motion;
+        bool is_open;
+        LinesBuffer *new_source_buffer;
+        AssemblyBuffer *new_assembly_buffer;
+    } value;
 } TuiMsg;
 
 typedef struct {
-	TuiCmdType type;
-	union {
-		size_t comp_unit_index;
-		size_t breakpoint_address;
-		struct {
-			size_t comp_unit_index;
-			size_t line_num;
-		} source_breakpoint_info;
-	} value;
+    TuiCmdType type;
+    union {
+        size_t comp_unit_index;
+        size_t breakpoint_address;
+        struct {
+            size_t comp_unit_index;
+            size_t line_num;
+        } source_breakpoint_info;
+    } value;
 } TuiCmd;
 
 typedef struct {
-	size_t selected_line;
-	size_t line_count;
-	size_t line_pos;
-	void *buffer;
+    size_t selected_line;
+    size_t line_count;
+    size_t line_pos;
+    void *buffer;
 } TuiBuffer;
 
 typedef struct {
-	size_t selected_line;
-	size_t line_count;
-	size_t line_pos;
-	LinesBuffer *buffer;
+    size_t selected_line;
+    size_t line_count;
+    size_t line_pos;
+    LinesBuffer *buffer;
 } TuiLinesBuffer;
 
 typedef struct {
-	size_t selected_line;
-	size_t line_count;
-	size_t line_pos;
-	AssemblyBuffer *buffer;
+    size_t selected_line;
+    size_t line_count;
+    size_t line_pos;
+    AssemblyBuffer *buffer;
 } TuiAssemblyBuffer;
 
 typedef struct {
-	struct {
-		TuiLinesBuffer source;
-		TuiAssemblyBuffer assembly;
-		TuiLinesBuffer picker;
-	} buffers;
-	DebugSession *session;
-	LineInstructions *selected_line_instructions;
-	size_t selected_comp_unit_index;
-	TuiWindow focused_win;
-	bool is_picker_open;
+    struct {
+        TuiLinesBuffer source;
+        TuiAssemblyBuffer assembly;
+        TuiLinesBuffer picker;
+    } buffers;
+    DebugSession *session;
+    LineInstructions *selected_line_instructions;
+    size_t selected_comp_unit_index;
+    TuiWindow focused_win;
+    bool is_picker_open;
 } TuiModel;
 
 typedef struct {
-	char buffer[MAX_INPUT_BUFFER];
-	char key;
-	uint8_t count;
+    char buffer[MAX_INPUT_BUFFER];
+    char key;
+    uint8_t count;
 } InputBuffer;
 
 void open_tui();

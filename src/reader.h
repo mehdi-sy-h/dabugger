@@ -5,20 +5,20 @@
 #include <stdlib.h>
 
 typedef struct {
-	const uint8_t *cursor;
-	size_t remaining;
+    const uint8_t *cursor;
+    size_t remaining;
 } BinaryReader;
 
 typedef enum {
-	READ_OK = 0,
-	READ_ERR_OUT_OF_BOUNDS,
-	READ_ERR_LEB_U64_OVERFLOW,
-	READ_ERR_LEB_I64_OVERFLOW
+    READ_OK = 0,
+    READ_ERR_OUT_OF_BOUNDS,
+    READ_ERR_LEB_U64_OVERFLOW,
+    READ_ERR_LEB_I64_OVERFLOW
 } ReadStatus;
 
 typedef struct {
-	size_t bytes_consumed;
-	ReadStatus status;
+    size_t bytes_consumed;
+    ReadStatus status;
 } ReadResult;
 
 extern ReadResult advance_reader(BinaryReader *reader, size_t bytes);

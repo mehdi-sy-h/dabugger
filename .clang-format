@@ -2,9 +2,7 @@
 ---
 Language: C
 BasedOnStyle: LLVM
-UseTab: Always
 IndentWidth: 4
-TabWidth: 4
 LineEnding: LF
 AllowShortFunctionsOnASingleLine: Empty
 ---

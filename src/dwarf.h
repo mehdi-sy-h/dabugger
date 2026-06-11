@@ -9,160 +9,160 @@
 
 /* See Dwarf 5 Specification 7.22 */
 typedef enum {
-	DW_LNCT_path = 0x1,
-	DW_LNCT_directory_index = 0x2,
-	DW_LNCT_timestamp = 0x3,
-	DW_LNCT_size = 0x4,
-	DW_LNCT_MD5 = 0x5,
-	DW_LNCT_lo_user = 0x2000,
-	DW_LNCT_hi_user = 0x3fff,
+    DW_LNCT_path = 0x1,
+    DW_LNCT_directory_index = 0x2,
+    DW_LNCT_timestamp = 0x3,
+    DW_LNCT_size = 0x4,
+    DW_LNCT_MD5 = 0x5,
+    DW_LNCT_lo_user = 0x2000,
+    DW_LNCT_hi_user = 0x3fff,
 } DwarfLineNumContentType;
 
 /* See Dwarf 5 Specification 7.5.5 */
 typedef enum {
-	DW_FORM_data1 = 0x0b,
-	DW_FORM_data2 = 0x05,
-	DW_FORM_data4 = 0x06,
-	DW_FORM_data8 = 0x07,
-	DW_FORM_data16 = 0x1e,
-	DW_FORM_sdata = 0x0d,
-	DW_FORM_udata = 0x0f,
+    DW_FORM_data1 = 0x0b,
+    DW_FORM_data2 = 0x05,
+    DW_FORM_data4 = 0x06,
+    DW_FORM_data8 = 0x07,
+    DW_FORM_data16 = 0x1e,
+    DW_FORM_sdata = 0x0d,
+    DW_FORM_udata = 0x0f,
 
-	DW_FORM_string = 0x08,
-	DW_FORM_strp = 0x0e,
-	DW_FORM_line_strp = 0x1f,
-	DW_FORM_strp_sup = 0x1d,
+    DW_FORM_string = 0x08,
+    DW_FORM_strp = 0x0e,
+    DW_FORM_line_strp = 0x1f,
+    DW_FORM_strp_sup = 0x1d,
 
-	DW_FORM_strx = 0x1a,
-	DW_FORM_strx1 = 0x25,
-	DW_FORM_strx2 = 0x26,
-	DW_FORM_strx3 = 0x27,
-	DW_FORM_strx4 = 0x28,
+    DW_FORM_strx = 0x1a,
+    DW_FORM_strx1 = 0x25,
+    DW_FORM_strx2 = 0x26,
+    DW_FORM_strx3 = 0x27,
+    DW_FORM_strx4 = 0x28,
 
-	DW_FORM_block = 0x09,
-	DW_FORM_block1 = 0x0a,
-	DW_FORM_block2 = 0x03,
-	DW_FORM_block4 = 0x04,
+    DW_FORM_block = 0x09,
+    DW_FORM_block1 = 0x0a,
+    DW_FORM_block2 = 0x03,
+    DW_FORM_block4 = 0x04,
 
-	DW_FORM_flag = 0x0c,
+    DW_FORM_flag = 0x0c,
 
-	DW_FORM_sec_offset = 0x17,
+    DW_FORM_sec_offset = 0x17,
 } DwarfFormCode;
 
 typedef struct {
-	DwarfLineNumContentType content_type;
-	DwarfFormCode form_code;
+    DwarfLineNumContentType content_type;
+    DwarfFormCode form_code;
 } DwarfLineNumFormatDesc;
 
 /* Not all the fields are necessarily defined for a given entry.
  * But they are all zero initialized, including fields that are undefined. */
 typedef struct {
-	const char *path;
-	uint64_t directory_index;
-	uint64_t timestamp;
-	uint64_t size;
-	uint8_t md5[16];
+    const char *path;
+    uint64_t directory_index;
+    uint64_t timestamp;
+    uint64_t size;
+    uint8_t md5[16];
 } DwarfLineNumContentEntry;
 
 /* The line number program header for a compilation unit */
 typedef struct {
-	bool is_dwarf64;
-	uint64_t unit_length; /* DWARF32 only uses 4 bytes */
-	uint16_t version;
-	uint8_t address_size;
-	uint8_t segment_selector_size;
-	uint64_t header_length; /* DWARF32 only uses 4 bytes */
-	uint8_t minimum_instruction_length;
-	uint8_t maximum_operations_per_instruction;
-	uint8_t default_is_stmt;
-	int8_t line_base;
-	uint8_t line_range;
-	uint8_t opcode_base;
-	uint8_t *standard_opcode_lengths;
-	uint8_t directory_entry_format_count;
-	DwarfLineNumFormatDesc *directory_entry_format;
-	uint64_t directories_count;
-	DwarfLineNumContentEntry *directories;
-	uint8_t file_name_entry_format_count;
-	DwarfLineNumFormatDesc *file_name_entry_format;
-	uint64_t file_names_count;
-	DwarfLineNumContentEntry *file_names;
+    bool is_dwarf64;
+    uint64_t unit_length; /* DWARF32 only uses 4 bytes */
+    uint16_t version;
+    uint8_t address_size;
+    uint8_t segment_selector_size;
+    uint64_t header_length; /* DWARF32 only uses 4 bytes */
+    uint8_t minimum_instruction_length;
+    uint8_t maximum_operations_per_instruction;
+    uint8_t default_is_stmt;
+    int8_t line_base;
+    uint8_t line_range;
+    uint8_t opcode_base;
+    uint8_t *standard_opcode_lengths;
+    uint8_t directory_entry_format_count;
+    DwarfLineNumFormatDesc *directory_entry_format;
+    uint64_t directories_count;
+    DwarfLineNumContentEntry *directories;
+    uint8_t file_name_entry_format_count;
+    DwarfLineNumFormatDesc *file_name_entry_format;
+    uint64_t file_names_count;
+    DwarfLineNumContentEntry *file_names;
 } LineNumProgHeader;
 
 /* See Dwarf 5 Specification 6.2.3 */
 typedef enum {
-	DW_LNS_copy = 0x01,
-	DW_LNS_advance_pc = 0x02,
-	DW_LNS_advance_line = 0x03,
-	DW_LNS_set_file = 0x04,
-	DW_LNS_set_column = 0x05,
-	DW_LNS_negate_stmt = 0x06,
-	DW_LNS_set_basic_block = 0x07,
-	DW_LNS_const_add_pc = 0x08,
-	DW_LNS_fixed_advance_pc = 0x09,
-	DW_LNS_set_prologue_end = 0x0a,
-	DW_LNS_set_epilogue_begin = 0x0b,
-	DW_LNS_set_isa = 0x0c,
+    DW_LNS_copy = 0x01,
+    DW_LNS_advance_pc = 0x02,
+    DW_LNS_advance_line = 0x03,
+    DW_LNS_set_file = 0x04,
+    DW_LNS_set_column = 0x05,
+    DW_LNS_negate_stmt = 0x06,
+    DW_LNS_set_basic_block = 0x07,
+    DW_LNS_const_add_pc = 0x08,
+    DW_LNS_fixed_advance_pc = 0x09,
+    DW_LNS_set_prologue_end = 0x0a,
+    DW_LNS_set_epilogue_begin = 0x0b,
+    DW_LNS_set_isa = 0x0c,
 } DwarfLineStandardOpcode;
 
 /* See Dwarf 5 Specification 6.2.3 */
 typedef enum {
-	DW_LNE_end_sequence = 0x01,
-	DW_LNE_set_address = 0x02,
-	DW_LNE_set_discriminator = 0x04,
-	DW_LNE_lo_user = 0x80,
-	DW_LNE_hi_user = 0xff,
+    DW_LNE_end_sequence = 0x01,
+    DW_LNE_set_address = 0x02,
+    DW_LNE_set_discriminator = 0x04,
+    DW_LNE_lo_user = 0x80,
+    DW_LNE_hi_user = 0xff,
 } DwarfLineExtendedOpcode;
 
 typedef struct {
-	size_t address;
-	uint64_t op_index;
-	uint32_t file;
-	uint32_t line;
-	uint32_t column;
-	uint32_t discriminator;
-	uint16_t isa;
-	bool is_stmt;
-	bool basic_block;
-	bool end_sequence;
-	bool prologue_end;
-	bool epilogue_begin;
+    size_t address;
+    uint64_t op_index;
+    uint32_t file;
+    uint32_t line;
+    uint32_t column;
+    uint32_t discriminator;
+    uint16_t isa;
+    bool is_stmt;
+    bool basic_block;
+    bool end_sequence;
+    bool prologue_end;
+    bool epilogue_begin;
 } LineNumStateMachine;
 
 typedef struct {
-	size_t address;
-	uint64_t op_index;
-	uint32_t file;
-	uint32_t line;
-	uint32_t column;
-	uint32_t discriminator;
-	bool end_sequence;
-	bool is_stmt;
-	bool basic_block;
-	bool prologue_end;
-	bool epilogue_begin;
+    size_t address;
+    uint64_t op_index;
+    uint32_t file;
+    uint32_t line;
+    uint32_t column;
+    uint32_t discriminator;
+    bool end_sequence;
+    bool is_stmt;
+    bool basic_block;
+    bool prologue_end;
+    bool epilogue_begin;
 } LineInfoEntry;
 
 typedef struct {
-	size_t entry_count;
-	LineInfoEntry *entries;
+    size_t entry_count;
+    LineInfoEntry *entries;
 } LineInfoSequence;
 
 typedef struct {
-	size_t sequences_count;
-	LineInfoSequence *sequences;
+    size_t sequences_count;
+    LineInfoSequence *sequences;
 } LineInfoTable;
 
 /* The line number information for a particular compilation unit referenced
  * in the inferior executable's `.debug_line` section. */
 typedef struct {
-	LineNumProgHeader *header;
-	LineInfoTable *table;
+    LineNumProgHeader *header;
+    LineInfoTable *table;
 } LineInfoCompUnit;
 
 typedef struct {
-	size_t comp_unit_count;
-	LineInfoCompUnit *comp_units;
+    size_t comp_unit_count;
+    LineInfoCompUnit *comp_units;
 } LineInfo;
 
 LineInfo *parse_debug_line_section(ProgramSections sections);

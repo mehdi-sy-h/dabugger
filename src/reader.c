@@ -5,111 +5,111 @@
 #include <string.h>
 
 ReadResult advance_reader(BinaryReader *reader, size_t bytes) {
-	ReadResult result = {.status = READ_OK};
-	if (bytes > reader->remaining) {
-		result.status = READ_ERR_OUT_OF_BOUNDS;
-		return result;
-	}
-	reader->cursor += bytes;
-	reader->remaining -= bytes;
-	result.bytes_consumed = bytes;
-	return result;
+    ReadResult result = {.status = READ_OK};
+    if (bytes > reader->remaining) {
+        result.status = READ_ERR_OUT_OF_BOUNDS;
+        return result;
+    }
+    reader->cursor += bytes;
+    reader->remaining -= bytes;
+    result.bytes_consumed = bytes;
+    return result;
 }
 
 ReadResult read_bytes(BinaryReader *reader, void *out, size_t bytes) {
-	const uint8_t *current_cursor = reader->cursor;
+    const uint8_t *current_cursor = reader->cursor;
 
-	ReadResult result = advance_reader(reader, bytes);
-	if (result.status != READ_OK)
-		return result;
+    ReadResult result = advance_reader(reader, bytes);
+    if (result.status != READ_OK)
+        return result;
 
-	memcpy(out, current_cursor, bytes);
-	return result;
+    memcpy(out, current_cursor, bytes);
+    return result;
 }
 
 ReadResult peek_bytes(BinaryReader *reader, void *out, size_t bytes) {
-	ReadResult result = {.status = READ_OK};
-	if (bytes > reader->remaining) {
-		result.status = READ_ERR_OUT_OF_BOUNDS;
-		return result;
-	}
+    ReadResult result = {.status = READ_OK};
+    if (bytes > reader->remaining) {
+        result.status = READ_ERR_OUT_OF_BOUNDS;
+        return result;
+    }
 
-	memcpy(out, reader->cursor, bytes);
-	return result;
+    memcpy(out, reader->cursor, bytes);
+    return result;
 }
 
 ReadResult read_uleb128(BinaryReader *reader, uint64_t *out) {
-	ReadResult result = {0};
-	uint8_t byte;
-	*out = 0;
-	do {
-		if (result.bytes_consumed == 10) {
-			result.status = READ_ERR_LEB_U64_OVERFLOW;
-			return result;
-		}
+    ReadResult result = {0};
+    uint8_t byte;
+    *out = 0;
+    do {
+        if (result.bytes_consumed == 10) {
+            result.status = READ_ERR_LEB_U64_OVERFLOW;
+            return result;
+        }
 
-		ReadResult byte_read_result = read_bytes(reader, &byte, 1);
+        ReadResult byte_read_result = read_bytes(reader, &byte, 1);
 
-		if (byte_read_result.status != READ_OK) {
-			/* TODO: Maybe more specific error instead */
-			result.status = byte_read_result.status;
-			return result;
-		}
+        if (byte_read_result.status != READ_OK) {
+            /* TODO: Maybe more specific error instead */
+            result.status = byte_read_result.status;
+            return result;
+        }
 
-		*out |= (uint64_t)(byte & 0x7f) << ((result.bytes_consumed) * 7);
-		result.bytes_consumed++;
-	} while ((byte & 0x80) != 0);
-	return result;
+        *out |= (uint64_t)(byte & 0x7f) << ((result.bytes_consumed) * 7);
+        result.bytes_consumed++;
+    } while ((byte & 0x80) != 0);
+    return result;
 }
 
 ReadResult read_sleb128(BinaryReader *reader, int64_t *out) {
-	ReadResult result = {0};
-	uint8_t byte;
-	*out = 0;
-	do {
-		if (result.bytes_consumed == 10) {
-			result.status = READ_ERR_LEB_I64_OVERFLOW;
-			return result;
-		}
+    ReadResult result = {0};
+    uint8_t byte;
+    *out = 0;
+    do {
+        if (result.bytes_consumed == 10) {
+            result.status = READ_ERR_LEB_I64_OVERFLOW;
+            return result;
+        }
 
-		ReadResult byte_read_result = read_bytes(reader, &byte, 1);
+        ReadResult byte_read_result = read_bytes(reader, &byte, 1);
 
-		if (byte_read_result.status != READ_OK) {
-			/* TODO: Similarly, perhaps more specific error instead */
-			result.status = byte_read_result.status;
-			return result;
-		}
-		*out |= (int64_t)(byte & 0x7f) << ((result.bytes_consumed) * 7);
-		result.bytes_consumed++;
-	} while ((byte & 0x80) != 0);
+        if (byte_read_result.status != READ_OK) {
+            /* TODO: Similarly, perhaps more specific error instead */
+            result.status = byte_read_result.status;
+            return result;
+        }
+        *out |= (int64_t)(byte & 0x7f) << ((result.bytes_consumed) * 7);
+        result.bytes_consumed++;
+    } while ((byte & 0x80) != 0);
 
-	if ((result.bytes_consumed * 7 < sizeof(int64_t) * CHAR_BIT) &&
-		((byte & 0x40) != 0)) {
-		*out |= -((int64_t)1 << (result.bytes_consumed * 7));
-	}
+    if ((result.bytes_consumed * 7 < sizeof(int64_t) * CHAR_BIT) &&
+        ((byte & 0x40) != 0)) {
+        *out |= -((int64_t)1 << (result.bytes_consumed * 7));
+    }
 
-	return result;
+    return result;
 }
 
 /* The output string is heap allocated. The caller must ensure it is freed. */
 ReadResult read_cstring(BinaryReader *reader, const char **out) {
-	ReadResult result = {0};
+    ReadResult result = {0};
 
-	void *end = memchr(reader->cursor, '\0', reader->remaining);
-	if (!end) {
-		result.status = READ_ERR_OUT_OF_BOUNDS;
-		return result;
-	}
+    void *end = memchr(reader->cursor, '\0', reader->remaining);
+    if (!end) {
+        result.status = READ_ERR_OUT_OF_BOUNDS;
+        return result;
+    }
 
-	*out = strdup((const char *)reader->cursor);
-	if (*out == NULL) {
-		perror("error duplicating string");
-		exit(EXIT_FAILURE);
-	}
+    *out = strdup((const char *)reader->cursor);
+    if (*out == NULL) {
+        perror("error duplicating string");
+        exit(EXIT_FAILURE);
+    }
 
-	result.bytes_consumed = (size_t)((uint8_t *)end - reader->cursor + 1);
-	reader->cursor += result.bytes_consumed;
-	reader->remaining -= result.bytes_consumed;
+    result.bytes_consumed = (size_t)((uint8_t *)end - reader->cursor + 1);
+    reader->cursor += result.bytes_consumed;
+    reader->remaining -= result.bytes_consumed;
 
-	return result;
+    return result;
 }
