@@ -39,8 +39,9 @@ static TuiMsg dequeue_msg(TuiMsgQueue *msg_queue) {
 		msg_queue->queue[i - 1] = msg_queue->queue[i];
 	}
 	msg_queue->count -= 1;
-	msg_queue->queue =
-		reallocarray(msg_queue->queue, msg_queue->count, sizeof(TuiMsg));
+	if (msg_queue->count != 0)
+		msg_queue->queue =
+			reallocarray(msg_queue->queue, msg_queue->count, sizeof(TuiMsg));
 
 	return msg;
 }
