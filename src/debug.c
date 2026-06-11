@@ -157,8 +157,6 @@ static void inject_breakpoints(DebugSession *session) {
 		/* TODO: Do this properly */
 		if (real_address == regs.rip)
 			continue;
-		fprintf(stderr, "vma: %lx, real: %lx\n", breakpoint->address,
-				real_address);
 		inject_byte(session->inferior_pid, real_address, INT3);
 	}
 }
@@ -192,8 +190,6 @@ void spawn_inferior(DebugSession *session) {
 	/* TODO: */
 	bool is_found_load_address = get_load_address(
 		pid, session->inferior_real_path, &session->proc_load_address);
-
-	fprintf(stderr, "%lx\n", session->proc_load_address);
 
 	if (!is_found_load_address) {
 		/* TODO: Handle */
@@ -280,8 +276,6 @@ void handle_inferior_signal(DebugSession *session, int signal_child_fd) {
 					size_t real_breakpoint_address = get_address_from_vma(
 						breakpoint.address, session->program_data->load_address,
 						session->proc_load_address);
-					fprintf(stderr, "vma: %lx, real: %lx\n", breakpoint.address,
-							real_breakpoint_address);
 
 					if (real_breakpoint_address != regs.rip)
 						continue;
