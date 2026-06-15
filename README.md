@@ -3,10 +3,6 @@ https://github.com/user-attachments/assets/7088da90-46a2-433a-a03c-8178fe0cea0c
 # dabugger
 An x86-64 Linux debugger for ELF+DWARF executables.
 
-~~You may find a series of articles describing the development process for this debugger on my blog [here](https://mehdisy.com/blog/dabugger).~~ (WIP)
-
-Also, I'm looking for a job. If you are interested in hiring me (as a graduate or junior developer) and you are in the UK (remote, or hybrid/office in or near London), please email me at mehdi.h.business@pm.me. 
-
 ## Overview
 `dabugger` implements a barebones DWARF 5 line number program (`.debug_line`) parser, an ELF64 parser and a terminal user interface with basic vim motions. Since we parse `.debug_line` we can map assembly instructions to the relevant source lines, provided the debuggee was compiled with debug symbols (that is, with the `-g` flag for `gcc` or `clang`). DWARF 5 requires that the current directory be included in the line program headers, so parsing the `.debug_line` section is effectively self contained. This means we don't have to parse the other DWARF sections (containing the DIEs), which are significantly more tedious to implement. However this means that `dabugger` cannot currently map variables to their respective addresses in memory, and features more complicated than this. The only dependencies are `glibc`, `zydis` (for x86-64 disassembly, which is necessary for the assembly view) and `ncurses` (for the terminal user interface).
 
